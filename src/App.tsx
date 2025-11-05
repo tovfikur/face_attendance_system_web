@@ -1,12 +1,13 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/layouts/AppLayout'
 import { DashboardPage } from '@/pages/Dashboard'
-import { LiveViewPage } from '@/pages/LiveView'
-import { FaceRegisterPage } from '@/pages/FaceRegister'
-import { AttendancePage } from '@/pages/Attendance'
+import { LiveViewIntegratedPage } from '@/pages/LiveViewIntegrated'
+import { FaceRegistrationIntegratedPage } from '@/pages/FaceRegistrationIntegrated'
+import { AttendanceIntegratedPage } from '@/pages/AttendanceIntegrated'
+import { PersonManagementIntegratedPage } from '@/pages/PersonManagementIntegrated'
+import { ReportsIntegratedPage } from '@/pages/ReportsIntegrated'
 import { AlertsPage } from '@/pages/Alerts'
 import { SettingsPage } from '@/pages/Settings'
-import { ReportsPage } from '@/pages/Reports'
 import { CamerasPage } from '@/pages/Cameras'
 import { SystemHealthPage } from '@/pages/SystemHealth'
 import { AuditLogPage } from '@/pages/AuditLog'
@@ -20,13 +21,14 @@ const App = () => {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<AppLayout />}>
         <Route path="/" element={<DashboardPage />} />
-        <Route path="/live" element={<LiveViewPage />} />
-        <Route path="/live/:cameraId" element={<LiveViewPage />} />
-        <Route path="/face-register" element={<FaceRegisterPage />} />
-        <Route path="/attendance" element={<AttendancePage />} />
+        <Route path="/live" element={<LiveViewIntegratedPage />} />
+        <Route path="/live/:cameraId" element={<LiveViewIntegratedPage />} />
+        <Route path="/face-register" element={<FaceRegistrationIntegratedPage />} />
+        <Route path="/attendance" element={<AttendanceIntegratedPage />} />
+        <Route path="/persons" element={<PersonManagementIntegratedPage />} />
         <Route path="/alerts" element={<AlertsPage />} />
         <Route path="/cameras" element={<CamerasPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/reports" element={<ReportsIntegratedPage />} />
         <Route path="/system-health" element={<SystemHealthPage />} />
         <Route path="/history" element={<HistoryPage />} />
         <Route path="/audit-log" element={<AuditLogPage />} />
