@@ -1,0 +1,1418 @@
+› now write what i need for run this as backend. write every point every api end point everything. don't miss any single point.
+
+
+• I’m planning to create a detailed backend spec that covers all endpoints the front-end expects—like attendance, Odoo integration, detection provider, cameras, user management, and system health. I’ll ensure
+
+• Ran powershell.exe -NoLogo -NoProfile -Command 'Get-Content -Path src/types/index.ts'
+  └ export type StreamType = 'RTSP' | 'USB' | 'HTTP' | 'Socket' | 'Local File'
+
+    … +270 lines
+
+• Ran powershell.exe -NoLogo -NoProfile -Command 'Select-String -Path src/services/mockApi.ts -Pattern "fetch"'
+  └
+    src\services\mockApi.ts:90:  async fetchSystemSummary(): Promise<SystemSummary> {
+    … +26 lines
+
+• Ran powershell.exe -NoLogo -NoProfile -Command 'Select-String -Path src/services/mockApi.ts -Pattern "async create"'
+  └
+    src\services\mockApi.ts:124:  async createCamera(camera: Camera): Promise<Camera> {
+    src\services\mockApi.ts:537:  async createUserAccount(user: UserAccount) {
+
+• Ran powershell.exe -NoLogo -NoProfile -Command 'Select-String -Path src/services/mockApi.ts -Pattern "async update"'
+  └
+    src\services\mockApi.ts:137:  async updateCamera(cameraId: string, updates: Partial<Camera>): Promise<Camera | undefined> {
+    … +4 lines
+
+
+
+• Ran powershell.exe -NoLogo -NoProfile -Command 'Select-String -Path src/services/mockApi.ts -Pattern "delete"'
+  └
+    src\services\mockApi.ts:159:  async deleteCamera(cameraId: string): Promise<boolean> {
+    … +2 lines
+
+
+
+• Ran powershell.exe -NoLogo -NoProfile -Command 'Select-String -Path src/services/mockApi.ts -Pattern "export"'
+  └
+    src\services\mockApi.ts:89:export const mockApi = {
+    … +3 lines
+
+
+
+• Ran powershell.exe -NoLogo -NoProfile -Command 'Select-String -Path src/services/mockApi.ts -Pattern "alert"'
+  └
+    src\services\mockApi.ts:2:  alerts as initialAlerts,
+    … +20 lines
+
+
+
+• Ran powershell.exe -NoLogo -NoProfile -Command 'Select-String -Path src/services/mockApi.ts -Pattern "Attendance"'
+  └
+    src\services\mockApi.ts:3:  attendanceLogs as initialAttendanceLogs,
+    … +22 lines
+
+
+
+• Ran powershell.exe -NoLogo -NoProfile -Command 'Select-String -Path src/services/mockApi.ts -Pattern "test"'
+  └
+    src\services\mockApi.ts:175:  async testCameraConnection(cameraId: string): Promise<{ success: boolean; latency: number }> {
+    … +2 lines
+
+
+
+■ Conversation interrupted - tell the model what to do differently. Something went wrong? Hit `/feedback` to report the issue.
+
+
+› every api type what should go as request what should come as response every thing plan  and write the plan. we will implement it latter.
+
+
+• Backend Blueprint
+
+  - Tech Stack & Runtime: Node.js 20 LTS, TypeScript, Express (or Fastify) for REST, Socket.IO/WebSocket for live pushes, Prisma/TypeORM with PostgreSQL 15, Redis for caching/queues, BullMQ/Agenda for jobs,
+    Zod/IO-TS for validation, Winston/Pino for logging, OpenAPI/Swagger docs, Docker multi-stage, Kubernetes or Docker Compose for orchestration. Env config via dotenv/AWS Parameter Store.
+  - Service Layout
+      - api-gateway REST server (auth, RBAC, request validation).
+      - stream-ingest service for camera ingest, transcoding to HLS/DASH, edge caching.
+      - detection-worker orchestrates frame extraction, pushes to third-party detection API.
+      - odoo-sync-worker handles outbound sync & inbound callbacks.
+      - Shared libraries: domain models, validation schemas, RBAC, error codes, logging.
+  - Core Infrastructure
+      - PostgreSQL schemas for cameras, attendance, detections, alerts, users, roles, audit, system metrics, configs.
+      - Redis: job queues (detection:queue, odoo:sync, alerts), cache for status/heartbeats.
+      - Object storage (S3/MinIO) for thumbnails/snapshots.
+      - Message broker optional (NATS/Kafka) if high throughput for detection events.
+      - Observability: Prometheus metrics, OpenTelemetry tracing, Grafana dashboards.
+      - Security: OAuth2/OpenID Connect for SSO, JWT access tokens, refresh token storage, role-based permissions, IP allowlist for control room, rate limiting (Redis-based).
+  - General API Contract
+      - Base path /api/v1.
+      - Auth header Authorization: Bearer <token>.
+      - Responses: JSON with envelope { success: boolean, data?: T, error?: { code, message, details? } }.
+      - Pagination via page, pageSize; filtering query params as used by frontend.
+      - Date/time ISO 8601 UTC; durations in ms.
+
+  ———
+
+  Domain Modules & Endpoints
+
+  1. Authentication & Users
+      - POST /auth/login → { username, password } → tokens + user profile, issued roles.
+      - POST /auth/refresh → { refreshToken }.
+      - POST /auth/logout → revoke refresh token.
+      - GET /auth/me → current user info, permissions.
+      - GET /users → list (filters: role, status).
+      - POST /users → create user { name, email, roleId, password? }.
+      - GET /users/:id.
+      - PUT /users/:id → update roleId/status.
+      - DELETE /users/:id → soft delete (retain audit).
+      - PATCH /users/:id/password → change password.
+      - GET /roles → { id, name, permissions[], description }.
+  2. Camera Management
+      - GET /cameras → filters status, streamType, enabled.
+      - POST /cameras → create camera { id(optional), name, location, streamType, streamUrl/devicePath, enabled }.
+      - GET /cameras/:id.
+      - PUT /cameras/:id → update metadata.
+      - PATCH /cameras/:id/state → toggle enabled.
+      - DELETE /cameras/:id.
+      - POST /cameras/:id/test-connection → hit worker to test connectivity; response { success, latencyMs, bitrate, message }.
+      - POST /cameras/:id/snapshot → returns signed URL + stores image.
+      - GET /cameras/:id/summary → detection stats, uptime, unknown face counts.
+      - GET /cameras/summary → aggregated CameraSummary[].
+      - POST /cameras/import & POST /cameras/export for JSON config backup.
+      - Streaming endpoints (served from stream-ingest):
+          - GET /stream/hls/:cameraId/index.m3u8
+          - GET /stream/ws/:cameraId for WebRTC/mjpeg fallback.
+  3. Live Monitoring & Detections
+      - GET /detections/live → optional cameraId, returns latest PersonDetection[] (bounded).
+      - POST /detections/send-frame → { cameraId } triggers job, returns log entry stub.
+      - POST /detections/test-provider → health check.
+      - GET /detections/provider/config → DetectionProviderConfig.
+      - PUT /detections/provider/config → update providerName, endpoint, apiKey, enabled, thresholds.
+      - GET /detections/events → query params: limit, status, cameraId, from, to.
+      - Websocket channel detections broadcasting new events + bounding boxes.
+
+     Third-party detection integration plan:
+      - Worker grabs frame (RTSP snapshot/HLS segment), posts to provider per provider API (documented separately).
+      - Retry logic, exponential backoff, dead-letter queue for repeated failures.
+      - Normalise provider response to DetectionEventLog & PersonDetection.
+      - Config table for provider: endpoint URL, auth headers, expected schema, SLA thresholds.
+  4. Attendance & Logs
+      - GET /attendance/records → presence cards (limit?) with status, department.
+      - GET /attendance/logs → query search, cameraId, dateFrom, dateTo, odooStatus, page, pageSize.
+      - POST /attendance/export → { format: 'csv' | 'pdf', filters } returns export job id + signed URL when ready.
+      - POST /attendance/manual → { employeeId, cameraId, timestamp, status } manual override.
+      - GET /attendance/statistics → category query: hour/day/camera; respond with AttendanceStatisticPoint[].
+      - POST /attendance/push-odoo → { recordIds[] } triggers sync job; returns { accepted, rejected }.
+      - GET /attendance/odoo/logs → query limit, result.
+      - GET /attendance/pending-counts → aggregated unsynced totals.
+  5. Face Registration & Profiles
+      - GET /faces → list FaceProfile[] (filters by department, status).
+      - POST /faces → multipart { name, employeeId, department, images[] }.
+      - GET /faces/:id.
+      - PUT /faces/:id → edit metadata.
+      - DELETE /faces/:id.
+      - POST /faces/:id/images → add additional samples.
+      - DELETE /faces/:id/images/:imageId.
+      - GET /faces/default-payload (for developer console) returns template.
+  6. Alerts & Notifications
+      - GET /alerts → filters level, acknowledged, cameraId.
+      - POST /alerts/:id/acknowledge.
+      - POST /alerts/:id/mute → optional duration.
+
+  - DELETE /alerts/:id → clear.
+  - WebSocket alerts channel for push notifications.
+  - GET /notifications → NotificationItem[].
+  - POST /notifications/:id/acknowledge.
+  - GET /banner/messages → rotating messages list (for ticker).
+
+  7. System Dashboard & Health
+      - GET /system/summary → SystemSummary.
+      - GET /system/health/metrics → CPU/GPU/memory/disk/network series.
+      - GET /system/health/services → statuses of detection worker, sync worker, ingest, DB, etc.
+      - POST /system/commands/restart-streams → orchestrate service restart (requires Admin).
+      - POST /system/commands/refresh-feeds.
+      - GET /system/uptime & service versions.
+      - GET /system/network-metrics.
+      - GET /system/shifts → Shift schedules.
+  8. Audit Trail & History
+      - GET /audit → query by actor, severity, date range.
+      - GET /history/person/:employeeId → PersonHistoryEntry[] with snapshots, timeline ordering.
+      - GET /history/export -> PDF/CSV optional.
+  9. Odoo Integration
+      - GET /odoo/config.
+      - PUT /odoo/config → update baseUrl, database, company, apiKey, autoSync, modules toggles.
+      - POST /odoo/sync → immediate incremental sync of pending attendance.
+      - GET /odoo/logs → equivalent to attendance logs but accessible from settings.
+      - POST /odoo/test → ping connection & auth (validate db + modules).
+      - Webhook endpoint for Odoo callbacks (optional future):
+          - POST /integrations/odoo/hooks/attendance (secured with signature).
+
+     Sync Plan:
+      - Cron job (configurable) reading attendance rows with odooStatus=pending.
+      - Odoo RPC/REST call to /api/hr_attendance or relevant module.
+      - Update statuses, track failure counts, push audit entry.
+      - Expose metrics: last sync timestamp, total pending, failure reason summary.
+      - Exponential retry; escalate to alert after threshold.
+  10. Detection Provider Integration
+      - GET /integrations/detection/config (alias).
+      - PUT /integrations/detection/config.
+      - POST /integrations/detection/test.
+      - POST /integrations/detection/send-frame.
+      - GET /integrations/detection/logs.
+      - Background worker config: schedule heartbeat checks, track latency, fallback to degraded status after missed heartbeats, raise alerts.
+  11. Developer Console
+      - GET /developer/endpoints → metadata list (id, method, path, sample payload).
+      - POST /developer/endpoints/:id/invoke → executes call, returns raw JSON with sanitized sensitive fields; accessible to Admin only.
+  12. Localization & Settings
+      - GET /i18n/languages.
+      - GET /settings/timezones.
+      - PUT /settings/preferences per user (store in user profile).
+      - Optional GET /settings/preferences.
+  13. Exports & Files
+      - GET /files/:id serve signed URLs to stored assets.
+      - POST /exports/:type to request export via background job.
+      - GET /exports/:jobId/status.
+  14. System Maintenance
+      - POST /maintenance/refresh-cache.
+      - POST /maintenance/service/:id/restart.
+      - GET /maintenance/logs (application logs summary).
+      - GET /maintenance/version (app + build info).
+  15. Misc/Support
+      - GET /shifts.
+      - GET /network/latency aggregated metrics.
+      - GET /services/rotating-banners.
+      - POST /services/rotating-banners updates (Admin).
+
+  ———
+
+  Data Model Highlights
+
+  - cameras table: stream config, status, telemetry, OOB metadata.
+  - detections table: link to cameras, bounding boxes, provider payload, accuracy.
+  - attendance_logs table: in/out times, statuses, Odoo sync metadata.
+  - face_profiles table: user identity & images.
+  - alerts, notifications, audit_logs.
+  - odoo_sync_runs, detection_jobs, system_metrics for historical tracking.
+
+  Each model with created_at, updated_at, soft delete flags, version columns for concurrency.
+
+  ———
+
+  Integrations
+
+  - Odoo: Use XML-RPC or JSON-RPC depending on deployment; store API key securely; define mapping between local employee IDs and Odoo partners/employees; provide transformation for timezone.
+  - Detection provider: Abstract adapter layer, support API key header/bearer, handle rate limits, chunked video frames. Response normalization to unify detection schema. Optionally implement gRPC adapter.
+  - Video: Use FFmpeg (via stream-ingest) to transcode RTSP/USB to HLS; integrate with GPU acceleration optional; store 10-30s ring buffer for snapshot triggers.
+
+  ———
+
+  - Detection frame capture queue: triggered by UI send-frame or scheduled sampling.
+  - Attendance-odoo sync queue.
+  - Alert escalation queue (e.g., unresolved high severity triggers notifications).
+  - Heartbeat monitors: detection provider latency, camera offline detection.
+  - Export job processor generating CSV/PDF, storing to S3, update job status.
+
+  ———
+
+  Security & Compliance
+
+  - JWT tokens w/ expiration; refresh rotation.
+  - RBAC enforcement middleware (Admin/Operator/Viewer scopes).
+  - Audit logging for every create/update/delete and sensitive read.
+  - Input validation w/ central schema.
+  - CORS restrictions to front-end origin.
+  - Secrets stored in vault; config toggles for third-party endpoints.
+  - GDPR/compliance: data retention policy, ability to anonymize face profiles.
+
+  ———
+
+  Developer & Ops
+
+  - OpenAPI spec autogenerated from routes.
+  - Postman collection, integration tests per module.
+  - CI pipeline: lint, type-check, unit tests, e2e (supertest), docker build.
+  - Deployment pipeline with blue/green or rolling update.
+  - Feature flags for optional modules (Odoo/detection).
+  - Observability: structured logs, request IDs, error tracing, health check endpoints (/health/ready, /health/live).
+
+  ———
+
+  Implementation Roadmap
+
+  1. Foundation: project scaffolding, configs, auth, RBAC, base models.
+  2. Camera/stream module, detection adapter, queue infrastructure.
+  3. Attendance + Odoo sync module.
+  4. Alerts/notifications + WebSocket layer.
+  5. Face registration & history tracking.
+  6. System health metrics integration.
+  7. Developer console, exports, backups.
+  8. Comprehensive testing, documentation, deployment automation.
+
+  This plan enumerates every endpoint the current GUI expects, defines payload shapes, and outlines the operational workflows (Odoo/detection) so the future backend implementation slots in cleanly.
+
+
+› write it properly. and we are going to use python backend.
+
+
+• I’m organizing a thorough backend plan for the user’s Python service using FastAPI and SQLAlchemy. I aim to cover the tech stack, core services, REST API endpoints with request/response samples, background
+  tasks like Celery, and integrations like Odoo and WebSocket. I’ll follow clean formatting with bold headers and bullet lists while balancing detail and brevity.
+
+─ Worked for 10s ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Backend Stack
+
+  - Python 3.11+, FastAPI (REST + automatic OpenAPI), Uvicorn/Gunicorn, SQLAlchemy 2.0 + Alembic migrations, PostgreSQL 15, Redis 7 (cache + Celery broker), Celery workers for async jobs, Pydantic v2 for
+    schemas, HTTPX for outbound calls, Pydantic-settings for config, Poetry/uv for dependency mgmt, Docker multi-stage with Nginx or Traefik TLS termination.
+  - Observability: structlog + OpenTelemetry, Prometheus metrics, Sentry/Elastic for error aggregation.
+  - AuthN: OAuth2 password/refresh or SSO (OpenID Connect) via Authlib; AuthZ via role/permission decorator.
+
+  Core Services
+
+  - API service (FastAPI) handles REST, WebSocket endpoints, JWT issuance, RBAC checks.
+  - Worker service (Celery) for detection frame dispatch, Odoo sync, exports, alert escalations.
+  - Stream gateway (optional Python wrapper over GStreamer/FFmpeg) for generating snapshots or orchestrating external media service.
+  - Shared libs: domain models, error codes, logging adapters, HTTP clients (Odoo, detection provider).
+  - Infrastructure-as-code (Terraform/Ansible) to provision Postgres, Redis, object storage (S3/MinIO), secret manager.
+
+  Data Model Highlights
+
+  - users, roles, permissions, user_sessions (refresh tokens).
+  - cameras, camera_status_history, camera_streams.
+  - detections, detection_events, detection_jobs.
+  - attendance_logs, attendance_records, manual_overrides.
+  - face_profiles, face_images.
+  - alerts, notifications, audit_logs.
+  - odoo_configs, odoo_sync_runs, odoo_sync_results.
+  - system_metrics, system_services.
+    Each table includes created_at, updated_at, soft-delete flag, version column for optimistic locking.
+
+  API Surface (REST, base /api/v1)
+
+  - Auth:
+      - POST /auth/login body {username,password} → {accessToken,refreshToken,user{...}}.
+      - POST /auth/refresh body {refreshToken} → new tokens.
+      - POST /auth/logout body {refreshToken} → 204.
+      - GET /auth/me → current user profile and permissions.
+      - Password reset endpoints as needed.
+  - Users & Roles:
+      - GET /users filters role,status,search.
+      - POST /users body user profile; admin only.
+      - GET /users/{id}, PUT /users/{id}, DELETE /users/{id} (soft delete).
+      - PATCH /users/{id}/password.
+      - GET /roles returns list of roles with permissions.
+  - Cameras:
+      - GET /cameras filters status,streamType,enabled.
+      - POST /cameras body {name,location,streamType,streamUrl,enabled} (ID auto or provided).
+      - GET /cameras/{id} returns full camera record + telemetry.
+      - PUT /cameras/{id}, DELETE /cameras/{id}.
+      - PATCH /cameras/{id}/state body {enabled: bool}.
+      - POST /cameras/{id}/test-connection → {success:bool,latencyMs:int,bitrate:float,message}.
+      - POST /cameras/{id}/snapshot → signed URL & audit log.
+      - GET /cameras/summary → CameraSummary[].
+      - Backup/restore: POST /cameras/export returns JSON blob; POST /cameras/import accepts config array.
+  - Live Streams & WebSockets:
+      - REST snapshot endpoints (above).
+      - WebSocket /ws/live with channels camera.status, detections, alerts. Auth required, subscribe payload {channel, cameraId?}.
+      - Optional SSE /stream/events.
+  - Detections / Provider Integration:
+      - GET /detections/live query cameraId → latest PersonDetection[].
+      - POST /detections/send-frame body {cameraId} queues Celery job, returns {jobId, status}.
+      - POST /detections/test-provider → {status, latencyMs, message}.
+      - GET /detections/provider/config → DetectionProviderConfig.
+      - PUT /detections/provider/config updates providerName, endpoint, apiKey, enabled, thresholds.
+      - GET /detections/events filters status,cameraId,from,to,limit.
+      - Worker flow: grab frame (FFmpeg/gstreamer), call third-party HTTP API with configured headers, normalize payload, store detection + event log, push via WS.
+  - Attendance & Logs:
+      - GET /attendance/logs query search,cameraId,dateFrom,dateTo,odooStatus,page,pageSize.
+      - Response includes array of AttendanceLog, pagination meta, aggregated counts.
+      - POST /attendance/export body {format, filters} returns export job info; once ready, GET /exports/{jobId} for download (signed URL).
+      - POST /attendance/manual for manual mark {employeeId,cameraId,timestamp,status,note}.
+      - GET /attendance/statistics query category=hour|day|camera.
+      - POST /attendance/push-odoo body {recordIds:[...]} returns {queued:int, skipped:int}.
+      - GET /attendance/pending returns counts by status.
+      - GET /attendance/live-count for dashboard counter.
+  - Odoo Integration:
+      - GET /odoo/config (admin).
+      - PUT /odoo/config body fields baseUrl,database,company,apiKey,autoSync,timezone,modules.
+      - POST /odoo/test → connectivity check using stored config.
+      - GET /odoo/logs query limit,result,from,to returns OdooSyncLog[].
+      - POST /odoo/sync optional body filters (since/from) to enqueue Celery job.
+      - Background job: gather pending attendance, batch push via Odoo JSON-RPC/XML-RPC, update statuses, append logs, emit alerts on repeated failure, maintain metrics (pendingCount,failureCount,lastSync).
+      - Optional webhook POST /integrations/odoo/webhook for ack callbacks (HMAC verification).
+  - Face Registration:
+      - GET /faces filters department,search.
+      - POST /faces multipart: text fields + images (store in S3 & DB).
+      - GET /faces/{id}, PUT /faces/{id}, DELETE /faces/{id}.
+      - POST /faces/{id}/images add sample; DELETE /faces/{id}/images/{imageId}.
+      - GET /faces/{id}/preview return thumbnails list.
+  - Alerts & Notifications:
+      - GET /alerts filters level,acknowledged,cameraId.
+      - POST /alerts/{id}/acknowledge, POST /alerts/{id}/mute, DELETE /alerts/{id}.
+      - GET /notifications → NotificationItem[]; POST /notifications/{id}/acknowledge.
+      - WebSocket pushes for new alerts/notifications.
+      - Celery escalation job (e.g., unresolved critical alert -> SMS/email via integration).
+  - System Dashboard & Maintenance:
+      - GET /system/summary, GET /system/health/metrics, GET /system/health/services.
+      - POST /system/commands/restart-streams, POST /system/commands/refresh-feeds (Admin).
+      - GET /system/network-metrics, GET /system/uptime, GET /system/version.
+      - POST /maintenance/refresh-cache, POST /maintenance/service/{id}/restart.
+      - GET /maintenance/logs (paginated).
+      - Metrics aggregator job writes periodic snapshots to DB.
+  - Audit & History:
+      - GET /audit filters actor,severity,from,to.
+      - GET /history/person/{employeeId} returns PersonHistoryEntry[].
+      - GET /history/export triggers CSV/PDF job.
+  - Attendance History by Person:
+      - GET /history/person/{employeeId}/timeline optional cameraId, from, to.
+      - Provide snapshots (signed URLs), detection accuracy, camera metadata.
+  - Developer Console:
+      - GET /developer/endpoints list (Admin only).
+      - POST /developer/endpoints/{id}/invoke body optional payload → proxied call to internal service; respond with raw JSON (sanitized).
+      - Rate-limited, logged.
+  - Localization & Preferences:
+      - GET /i18n/languages, GET /settings/timezones.
+      - GET /settings/preferences per user; PUT /settings/preferences to store UI choices (dark mode, grid mode, etc.).
+      - Configs stored in user_preferences table (JSONB).
+  - Miscellaneous:
+      - GET /shifts returns shift schedules.
+      - GET /services/banner-messages returns rotating ticker data.
+      - POST /services/banner-messages update (Admin).
+      - GET /exports/{jobId} job status & download URL; DELETE /exports/{jobId} to purge.
+
+  Non-HTTP Interfaces
+
+  - Celery queues:
+      - detection:frame for frame extractions.
+      - detection:heartbeat scheduled provider checks.
+      - odoo:sync for attendance pushes.
+      - alerts:escalation, exports:build.
+  - Redis pub/sub (or WebSocket broadcast) for near real-time UI updates.
+  Third-Party Integration Notes
+
+  - Odoo:
+      - Use JSON-RPC endpoints: /jsonrpc. Methods execute_kw with models hr.attendance.
+      - Authentication via API key (token) or session; store encrypted.
+      - Map internal employee IDs to Odoo res.partner/hr.employee. Maintain bridging table if IDs differ.
+      - Handle timezone conversions when posting attendance.
+      - Implement per-record result tracking; mark odooStatus and odooSyncTime.
+      - Expose error codes and messages in OdooSyncLog.
+  - Detection Provider:
+      - Config: base URL, auth header, request schema template (e.g., base64 frame or URL).
+      - Worker pipeline: capture frame → encode JPEG → send POST /detect → parse response (detections with bounding boxes, IDs, confidence) → store in detections table → broadcast to UI.
+      - Configurable SLA thresholds (latency, failure ratio) raising alerts through same alert system.
+
+  Security / Compliance
+
+  - JWT with short-lived access (~15m) & rotating refresh tokens stored hashed.
+  - Role-based decorators controlling route access (Admin/Operator/Viewer).
+  - Input validation with Pydantic models, consistent error responses (HTTP 422 with details).
+  - CORS restricted to front-end host.
+  - Rate limiting (Redis sliding window) on login, export, developer endpoints.
+  - Audit logging: capture user, action, resource, IP at middleware.
+  - Secrets via environment/Hashicorp Vault; integrate with Docker secrets.
+
+  DevOps & Tooling
+
+  - Auto-generated docs at /docs & /openapi.json.
+  - Testing: Pytest unit tests, integration tests using TestClient + ephemeral Postgres, contract tests for Odoo/detection clients using VCR or mocked responses.
+  - CI pipeline: lint (ruff, mypy), tests, build Docker, push to registry.
+  - CD pipeline: blue/green deploy or rolling update on Kubernetes/Docker Swarm.
+  - Observability dashboard: Grafana panels for detection latency, Odoo sync success, camera uptime.
+
+  Implementation Roadmap
+
+  1. Set up project scaffold, base FastAPI app, config management, logging, health endpoints.
+  2. Implement auth, users, roles, audit logging.
+  3. Build camera CRUD + status endpoints, integrate with queue for connection tests.
+  4. Implement detection provider module (config, test, logs) + Celery worker skeleton.
+  5. Develop attendance module, stats, export tasks.
+  6. Implement Odoo integration (config, test, sync jobs, webhook).
+  7. Add face registration, alerts/notifications, system metrics.
+  8. Wire WebSocket channels, background heartbeat monitors.
+  9. Finalize developer console, preferences, exports download flow.
+  10. Harden security, observability, finish docs, run load tests, package Docker images.
+
+
+› make sure that backend have everything that we need for this front end to run perfectly.
+
+
+• I’m putting together a detailed blueprint for the backend API that fully supports all UI features, grouping endpoints into clear modules like authentication, cameras, live monitoring, attendance, and more.
+  Each module will have concise bullet lists of 4–6 endpoints mentioning HTTP methods and request/response details, plus notes on websockets, background jobs, and data storage. I want to make sure the spec
+  covers everything from multi-language support to system health, all structured thoughtfully with no code blocks but clear enough for developer guidance.
+
+─ Worked for 21s ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Backend Foundation
+
+  - Python 3.11+, FastAPI + Uvicorn/Gunicorn, SQLAlchemy 2.0 ORM with Alembic migrations, Postgres 15 primary datastore.
+  - Redis 7 for caching, Celery broker, WebSocket scaling; S3/MinIO for snapshots, thumbnails, export artifacts.
+  - Pydantic v2 schemas for validation, OAuth2 JWT auth (access + refresh), RBAC guard middleware, structured error envelope {success,data,error}.
+  - Observability stack: structlog + OpenTelemetry traces, Prometheus metrics, health probes (/health/live, /health/ready), audit trail logging for every mutating call.
+  - Docker multi-stage images, docker-compose for dev, IaC to provision Postgres/Redis/Secrets; secret storage via env/vault, configurable CORS and rate-limiting.
+
+
+  Authentication & User Access
+
+  - Auth core: POST /api/v1/auth/login (body {username,password} → {accessToken,refreshToken,user}); POST /api/v1/auth/refresh (body {refreshToken} → rotated tokens); POST /api/v1/auth/logout revokes refresh/
+    session; GET /api/v1/auth/me returns profile + permissions.
+  - Credential recovery: POST /api/v1/auth/request-reset (email → token), POST /api/v1/auth/reset (token,newPassword), POST /api/v1/auth/change-password (old/new).
+  - User directory: GET /api/v1/users (query role,status,search,page,pageSize → paginated list), POST /api/v1/users (create), GET /api/v1/users/{id}, PUT /api/v1/users/{id}, DELETE /api/v1/users/{id} (soft
+    delete).
+  - Role registry: GET /api/v1/roles list with permission strings, POST /api/v1/roles (admin-defined custom roles), PUT /api/v1/roles/{id} to update description/permissions, GET /api/v1/permissions canonical
+    permission dictionary.
+
+  Camera & Streaming Management
+
+  - Inventory: GET /api/v1/cameras (filters status,streamType,enabled,search), POST /api/v1/cameras (create), GET /api/v1/cameras/{id} (details + telemetry), PUT /api/v1/cameras/{id}, DELETE /api/v1/cameras/
+    {id}.
+  - Operations: PATCH /api/v1/cameras/{id}/state (body {enabled}), POST /api/v1/cameras/{id}/test-connection (returns {success,latencyMs,bitrate,message}), POST /api/v1/cameras/{id}/snapshot (returns signed
+    asset URL + stores metadata), GET /api/v1/cameras/{id}/summary (uptime, detections, unknowns).
+  - Bulk config: POST /api/v1/cameras/import (JSON array), GET /api/v1/cameras/export (returns config JSON + metadata), GET /api/v1/cameras/summary (collection of CameraSummary).
+  - Streaming endpoints: HLS /media/hls/{cameraId}/index.m3u8, JPEG /media/snapshot/{cameraId}.jpg, WebRTC/WebSocket /media/ws/{cameraId}; signed URL issuance for protected feeds, integration hooks for third-
+    party streaming server.
+
+  Live Monitoring, Detections & Provider Control
+
+  - Live detections: GET /api/v1/detections/live (query cameraId optional, limit) returning normalized PersonDetection[].
+  - Provider actions: POST /api/v1/detections/send-frame (body {cameraId}; response {jobId,status}), POST /api/v1/detections/test-provider (latency + status), GET /api/v1/detections/provider/config (current
+    settings), PUT /api/v1/detections/provider/config (update name, endpoint, apiKey, enabled flag, thresholds).
+  - Event history: GET /api/v1/detections/events (filters status,cameraId,from,to,page,pageSize), GET /api/v1/detections/events/{id} (full payload, provider response).
+  - WebSocket topics: /ws/live channel detections streaming bounding boxes + meta, channel camera-status for uptime changes, support subscribe/unsubscribe message contract.
+  - Worker duties: capture frame (FFmpeg), POST to third-party detection API (configurable auth headers/body), store detection_events, update live_detections cache, push to WS, trigger alerts on SLA breaches.
+
+  Attendance, Analytics & Odoo Sync
+
+  - Attendance logs: GET /api/v1/attendance/logs (filters search,cameraId,dateFrom,dateTo,odooStatus,page,pageSize) returning list + pagination + summary counts; POST /api/v1/attendance/manual (manual entry),
+    DELETE /api/v1/attendance/{id} (void record with audit).
+  - Statistics: GET /api/v1/attendance/statistics (query category=hour|day|camera → AttendanceStatisticPoint[]), GET /api/v1/attendance/overview (totals for dashboard: present, late, unknowns, active cameras).
+  - Exports: POST /api/v1/attendance/export (body {format,filters} returns {jobId}), GET /api/v1/exports/{jobId} (status + download URL), DELETE /api/v1/exports/{jobId} purge.
+  - Odoo integration: GET /api/v1/odoo/config, PUT /api/v1/odoo/config (baseUrl, database, company, apiKey, autoSync, timezone), POST /api/v1/odoo/test (validate connectivity/auth), POST /api/v1/odoo/sync
+    (body {recordIds?}), GET /api/v1/odoo/logs (query result,limit,page returning OdooSyncLog[]), GET /api/v1/odoo/status (pendingCount, failureCount, lastSync).
+  - Background sync flow: Celery task reads attendance rows with odoo_status='pending', batches via Odoo JSON-RPC hr.attendance, updates statuses/failure reasons, appends log entry, emits system metrics,
+    raises alert after repeated failures; optional webhook POST /api/v1/integrations/odoo/webhook (HMAC verified) for asynchronous callbacks.
+
+  Face Registry & History
+
+  - Face profiles: GET /api/v1/faces (filters department,search,status), POST /api/v1/faces (multipart form with metadata + image files/base64), GET /api/v1/faces/{id}, PUT /api/v1/faces/{id}, DELETE /api/v1/
+    faces/{id} (soft delete).
+  - Image management: POST /api/v1/faces/{id}/images (append sample), DELETE /api/v1/faces/{id}/images/{imageId}, GET /api/v1/faces/{id}/images (signed URLs + metadata).
+  - History search: GET /api/v1/history/person/{employeeId} (filters cameraId,from,to,page → PersonHistoryEntry[] with thumbnails, accuracy, stream type), GET /api/v1/history/person/{employeeId}/timeline
+    (chronological events for UI timeline component).
+  - Enrollment pipeline: Celery job to process uploaded images (quality checks, vector embedding, optional third-party enrollment), store feature references for future use.
+
+  Alerts, Notifications & Audit Trail
+
+  - Alerts: GET /api/v1/alerts (filters level,acknowledged,cameraId,page), POST /api/v1/alerts/{id}/acknowledge, POST /api/v1/alerts/{id}/mute (body optional duration), DELETE /api/v1/alerts/{id} (clear),
+    POST /api/v1/alerts/generate-test (sandbox).
+  - Notifications: GET /api/v1/notifications (user-specific), POST /api/v1/notifications/{id}/acknowledge, DELETE /api/v1/notifications/{id}; WebSocket channel notifications for push dropdown updates.
+  - Audit: GET /api/v1/audit (filters actor,action,severity,from,to,page), GET /api/v1/audit/{id} (detail), POST /api/v1/audit/export (CSV).
+  - Alert jobs: Celery monitors detection latency, camera offline events, Odoo failure streaks; escalates via email/SMS/in-app notifications; all actions recorded in audit_logs.
+
+  System Health, Maintenance & Dashboard Data
+
+  - Dashboard summary: GET /api/v1/system/summary (active cameras, registered faces, people detected today, unknown alerts, manual overrides, attendance completion, last sync).
+  - Health metrics: GET /api/v1/system/health/metrics (CPU/GPU/memory/disk/network usage series), GET /api/v1/system/network-metrics (latency, throughput), GET /api/v1/system/services (service statuses,
+    version, uptime).
+  - Maintenance commands: POST /api/v1/system/commands/restart-streams, POST /api/v1/system/commands/refresh-feeds, POST /api/v1/system/cache/refresh, POST /api/v1/system/services/{id}/restart (all Admin-
+    only).
+  - Uptime & versioning: GET /api/v1/system/uptime, GET /api/v1/system/version (API, commit, build date), GET /api/v1/system/logs (tail logs with pagination).
+  - Scheduling & status board: GET /api/v1/shifts (shift schedules), GET /api/v1/services/banner-messages (rotating control-room ticker), POST /api/v1/services/banner-messages update.
+
+  Settings, Localization & Preferences
+
+  - Internationalization: GET /api/v1/i18n/languages (supported locales), POST /api/v1/i18n/languages (admin add translation metadata), localization files served via CDN or static endpoint; translation keys
+    accessible for future multi-language UI.
+  - Timezone control: GET /api/v1/settings/timezones, PUT /api/v1/settings/timezone per tenant or per user.
+  - User preferences: GET /api/v1/settings/preferences (grid mode, theme, auto-rotate toggles), PUT /api/v1/settings/preferences (stored as JSONB).
+  - Thresholds & detection tuning: GET /api/v1/settings/detection-thresholds, PUT /api/v1/settings/detection-thresholds (confidence slider mirrored in UI).
+  - Feature flags: GET /api/v1/settings/features, PUT /api/v1/settings/features to toggle optional modules (multi-language, keyboard shortcuts).
+
+  Developer Console & Diagnostics
+
+  - Endpoint catalog: GET /api/v1/developer/endpoints (id, label, description, method, path, sample payload/response), POST /api/v1/developer/endpoints/{id}/invoke (body optional custom payload; returns
+    {status, headers, body}); access restricted to Admins, rate-limited, logged.
+  - Raw JSON proxies: POST /api/v1/developer/proxy (target, method, body) for sandbox testing with safeguards, redacts secrets, enforces allowlist.
+  - Mock toggles: GET /api/v1/developer/mocks (list of mock data sets), PUT /api/v1/developer/mocks (enable/disable for UI preview states).
+  - Endpoint /ws requiring JWT query/header, supports multiplexed channels: camera-status, detections, alerts, notifications, system-metrics.
+  - Message contract: subscribe {action:'subscribe', channel:'detections', cameraId}, unsubscribe, heartbeat ping/pong to keep connection alive; connection events mirrored to audit log for compliance.
+  - Optional SSE fallback at /sse/events delivering same payload types for environments without WebSocket support.
+
+  Background Jobs & Scheduling (Celery)
+
+  - detection.capture pulls frames, calls third-party detection API, persists results, emits WS event, updates statistics.
+  - detection.heartbeat periodic provider health check updating status, raising alert if SLA breached.
+  - odoo.sync batches pending attendance, handles retries/backoff, updates counters/logs, refreshes dashboard metrics.
+  - exports.generate builds CSV/PDF (attendance, audit, history), uploads to object storage, updates job record.
+  - alerts.escalate monitors unresolved high-severity alerts, triggers notifications/ emails, optionally hitting SMS/Teams/Slack connectors.
+  - system.collect-metrics polls GPU/CPU/network stats, writes to metrics table for UI charts, updates system summary cache.
+  - camera.status-watchdog flags offline cameras, generates alerts/logs.
+
+  Data & Integrations
+
+  - Postgres schemas aligned with front-end types: cameras, camera_stats, attendance_logs, odoo_sync_runs, detections, detection_events, face_profiles, face_images, alerts, notifications, users, roles,
+    permissions, audit_logs, system_metrics, exports, user_preferences, banner_messages, shift_schedules.
+  - Encryption-at-rest for sensitive columns (API keys, passwords) using PG crypto or app-layer encryption; API keys loaded into memory only when needed.
+  - Odoo adapter: JSON-RPC over HTTPS, configurable endpoints, mapping table for employee IDs, timezone normalization, failure analytics per error code.
+  - Detection provider adapter: pluggable HTTP client with retry/backoff, request templates (base64 image or remote URL), response normalization (confidence, bounding box, identity metadata), error
+    classification for UI display.
+  - Object storage integration for thumbnails/snapshots accessible via signed URLs referenced in detections, history, attendance logs.
+
+  Implementation Roadmap
+
+  - Phase 1: bootstrap FastAPI project, config, logging, health endpoints, Postgres migrations, JWT auth, RBAC scaffolding.
+  - Phase 2: build camera CRUD + stream snapshot integration + summary metrics, ensure WebSocket groundwork.
+  - Phase 3: implement detection module (provider config endpoint, Celery pipeline, live detections WS, detection logs).
+  - Phase 4: deliver attendance module (logs, stats, manual overrides, exports) followed by Odoo configuration + sync worker + log endpoints.
+  - Phase 5: complete face registry, person history, alerts/notifications with WS push, audit trail instrumentation.
+  - Phase 6: system health metrics, maintenance commands, settings/timezone/language APIs, developer console, file/export management.
+  - Phase 7: harden security, add rate limiting, finalize docs/tests, run performance/load tests, package Docker images, prepare deployment automation.
+
+  This blueprint ensures every UI component in the CCTV monitoring and face-recognition attendance front-end has matching backend capabilities, data contracts, and operational support ready for implementation.
+
+• Model changed to gpt-5 with high reasoning
+
+• Model changed to gpt-5-codex with high reasoning
+
+• Model changed to gpt-5 with high reasoning
+
+
+› codex give me some feed back now you anlyze project and write proper plan for me with every detials .
+
+
+• I need to provide feedback and a detailed plan for backend implementation to support the front-end GUI for the CCTV monitoring and face recognition attendance system. The user is asking for thorough analysis
+  and all necessary details. I'll aim for a concise yet detailed approach that includes headers, bullet points, and mentions crucial aspects like files, commands, endpoints, data models, tasks, and milestones.
+  It's important to consider risks, non-functional requirements, timelines, and acceptance criteria, while ensuring proper documentation.
+
+  Developing Detailed Plan
+
+  I see the user initially asked me not to write any code and now they're requesting an analysis and a proper plan instead. They want a comprehensive plan that includes backlog items, architecture, data
+  models, a list of API endpoints, and how these will map to the front-end. I'll need to outline message flows, integration with third-party detection providers and Odoo, along with acceptance criteria,
+  milestones, tasks, dependencies, and a test plan, plus sample request/response schemas but no code.
+
+  Structuring the Comprehensive Plan
+
+  I need to organize the project plan into clear sections like Objectives, Current State Review, Gaps & Risks, Architecture, and Data Model Entities. It's important to include an API Contract with a list of
+  endpoints, methods, paths, and some minimal schemas for requests and responses, along with WebSocket channels and job specifics. I’ll address external integrations, security, non-functional requirements,
+  DevOps details, and deployment strategies. Additionally, I’ll provide a detailed timeline with milestones, acceptance criteria per module, and a mapping from UI to API. Error handling, naming conventions,
+  and a structured feature implementation plan are also essential.
+
+  Formatting the Plan
+
+  I need to create bullet lists for each section, steering clear of heavy code formatting but allowing small inline JSON examples or shape descriptions. The user previously asked for comprehensive details
+  about API requests and responses, so I’ll focus on that. I'll include an endpoint list with request/response shapes referencing Pydantic model names, all presented in bullet points. The feedback should
+  analyze the project, noting UI themes, fixed issues, and the GUI functionality that simulates detection providers and Odoo. Additionally, I'll mention the need for new endpoints and specific fields used in
+  the front-end.
+
+  Creating the Detailed Plan
+
+  I need to reference the front-end files for proper mapping, listing pages like Dashboard, LiveView, Attendance, Settings, and more. I’ll create an “API coverage matrix” showing required endpoints for each
+  page. The plan will follow style guidelines, using headers, bullet points, and monospace for paths. I’ll ensure it remains concise but thorough, including request/response mappings and field lists without
+  excessive verbosity.
+
+  I’ll provide project structure directories, config environment variables, Docker specifications, acceptance test cases, risks, and deliverables. Lastly, I’ll include a mapping of front-end calls to endpoints
+  and mention necessary WebSocket channels for asynchronous updates.
+
+─ Worked for 32s ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Executive Summary
+
+  - Goal: Deliver a full Python backend (FastAPI + Celery + Postgres + Redis + S3/MinIO) that cleanly matches your front-end’s needs for CCTV monitoring, third‑party detection provider integration, and Odoo
+    attendance sync.
+  - Outcome: A detailed, implementation-ready plan with all endpoints, data contracts, jobs, security, ops, and a phased roadmap. It ensures every GUI screen works perfectly against real APIs.
+
+  Current State Feedback
+
+  - Front-end covers: Dashboard, Live View, Attendance + Odoo, Settings (cameras/users/provider), Alerts, System Health, Audit, Face register, Person history, Developer console, i18n/timezone.
+  - UI uses polling; WebSockets are optional but recommended for real-time (detections, alerts).
+  - Data types in src/types/index.ts map well to a backend domain model. The plan below ensures 1:1 alignment for requests/responses.
+
+  Architecture
+
+  - Runtime: Python 3.11+, FastAPI (REST + WebSocket + OpenAPI).
+  - Storage: PostgreSQL 15 (SQLAlchemy 2 + Alembic).
+  - Cache/Queues: Redis 7, Celery workers.
+  - Media: FFmpeg/GStreamer (snapshots), optional HLS/WebRTC proxy.
+  - Files: S3/MinIO for thumbnails/snapshots/exports.
+  - Outbound: HTTPX clients for Odoo (JSON-RPC) + Detection provider (HTTP).
+  - Observability: structlog, OpenTelemetry, Prometheus, health probes.
+  - Security: OAuth2/JWT (access + refresh), RBAC, rate limiting, CORS, audit logging.
+  - Packaging: Docker multi-stage, docker-compose for dev; Helm/K8s optional later.
+
+  Project Structure
+
+  - app/
+      - main.py (FastAPI app factory, routers, middleware)
+      - api/v1/ (routers by module: auth, cameras, detections, attendance, odoo, faces, alerts, system, developer, settings, exports, audit, history)
+      - schemas/ (Pydantic v2 models for requests/responses)
+      - models/ (SQLAlchemy ORM models)
+      - repositories/ (DB access patterns)
+      - services/ (business logic, adapters: detection provider, odoo, exports, media)
+      - core/ (config, security, utils, errors, logging)
+      - ws/ (WebSocket manager, channels)
+  - worker/ (Celery app, task modules)
+  - migrations/ (Alembic)
+  - tests/ (pytest: unit, integration, contract)
+  - docker/ (compose, Dockerfiles, env templates)
+
+  Data Model (Key Entities)
+
+  - Users/Roles: users, roles, permissions, user_sessions, user_preferences
+  - Cameras: cameras, camera_status_history
+  - Detections: detections (normalized live items), detection_events (raw/provider/latency), detection_jobs
+  - Attendance: attendance_logs (columns from UI: employeeId, name, department, date, timeIn, timeOut, cameraId, cameraName, accuracy, status, odooStatus, odooSyncTime)
+  - Faces: face_profiles (name, employeeId, department), face_images
+  - Alerts/Notifications: alerts, notifications
+  - Odoo: odoo_configs, odoo_sync_runs, odoo_sync_results
+  - System: system_metrics, system_services, banner_messages, shift_schedules, exports, audit_logs
+  - Every table has: id, created_at, updated_at, soft-delete, version column.
+
+  API Contract (Base /api/v1)
+  Uniform response envelope:
+
+  - Success: { success: true, data: <payload>, meta? }
+  - Error: { success: false, error: { code, message, details? } }
+    Common patterns:
+  - Pagination: query page, pageSize; response meta { page, pageSize, total, totalPages }
+  - Filters: as named in UI (search/camera/date/odooStatus etc.)
+  - Time: ISO 8601 UTC; durations in ms.
+
+  1. Auth & Users
+
+  - POST /auth/login → body { username, password } → { accessToken, refreshToken, user }
+  - POST /auth/refresh → { refreshToken } → rotated tokens
+  - POST /auth/logout → { refreshToken } → 204
+  - GET /auth/me → user profile + permissions
+  - GET /users → filters: role, status, search, pagination; returns UserAccount[]
+  - POST /users → { name, email, roleId, password? } → created user
+  - GET /users/{id}; PUT /users/{id}; DELETE /users/{id} (soft)
+  - PATCH /users/{id}/password → { oldPassword, newPassword }
+  - GET /roles → Role[] with permissions
+
+  2. Cameras
+
+  - GET /cameras → filters status,streamType,enabled,search → Camera[]
+  - POST /cameras → { name, location, streamType, streamUrl, enabled } → Camera
+  - GET /cameras/{id} → Camera
+  - PUT /cameras/{id} → updates
+  - PATCH /cameras/{id}/state → { enabled: boolean } → updated Camera
+  - DELETE /cameras/{id} → 204
+  - POST /cameras/{id}/test-connection → { success, latencyMs, bitrate, message }
+  - POST /cameras/{id}/snapshot → { url, id, timestamp } (signed)
+  - GET /cameras/summary → CameraSummary[]
+  - POST /cameras/import → Camera[] (replace/merge mode); GET /cameras/export → { cameras: Camera[] }
+
+  3. Live Streams & WebSockets
+
+  - Media endpoints (serve from same app or separate gateway):
+      - GET /media/hls/{cameraId}/index.m3u8 (if HLS)
+      - GET /media/snapshot/{cameraId}.jpg
+      - GET /media/ws/{cameraId} (WebRTC/MJPEG)
+  - WS /ws
+      - Auth via JWT (query/header)
+      - Subscribe message { action:'subscribe', channel:'detections'|'camera-status'|'alerts', cameraId? }
+      - Push events: detection updates, camera status flips, alerts, notifications
+
+  4. Detections & Provider
+
+  - GET /detections/live → query cameraId?, limit? → PersonDetection[]
+  - GET /detections/events → filters status,cameraId,from,to,page,pageSize → DetectionEventLog[]
+  - POST /detections/send-frame → { cameraId } → { jobId, status } (queued)
+  - POST /detections/test-provider → { status: 'connected'|'degraded'|'offline', latencyMs, message }
+  - GET /detections/provider/config → DetectionProviderConfig
+  - PUT /detections/provider/config → update { providerName, endpoint, apiKey, enabled }
+    Worker flow:
+  - Capture frame (FFmpeg); POST to provider endpoint (auth header: Authorization: Bearer <key> or custom header); normalize response to:
+      - detections row(s) with personId, confidence, cameraId, timestamp, boundingBox
+      - detection_events with original payload, latency, status
+  - Push WS event; track SLA and raise alerts on degradation
+
+  5. Attendance & Analytics
+
+  - GET /attendance/logs → filters search,cameraId,dateFrom,dateTo,odooStatus,page,pageSize; returns { data: AttendanceLog[], meta }
+  - POST /attendance/manual → { employeeId, cameraId, timestamp, status, note? } → new AttendanceLog
+  - DELETE /attendance/{id} → void (audit)
+  - GET /attendance/statistics → category=hour|day|camera → AttendanceStatisticPoint[]
+  - GET /attendance/overview → dashboard counters (present/late/unknown, active cameras, lastSync)
+  - POST /attendance/export → { format: 'csv' | 'pdf', filters } → { jobId }
+  - GET /attendance/pending → { pendingCount, failedCount }
+
+  6. Odoo Integration
+
+  - GET /odoo/config → OdooIntegrationConfig (baseUrl, database, company, apiKey?, autoSync, status, lastSync, pendingCount, failureCount)
+  - PUT /odoo/config → updates config (encrypt at rest)
+  - POST /odoo/test → { ok: boolean, details }
+  - GET /odoo/logs → filters result,from,to,limit,page → OdooSyncLog[]
+  - POST /odoo/sync → body { recordIds?: string[] } → enqueues; returns { queued, skipped }
+  - GET /odoo/status → { pendingCount, failureCount, lastSync, status }
+    Worker flow:
+  - Select attendance_logs with odooStatus='pending' (or list by recordIds)
+  - JSON-RPC to Odoo (execute_kw model hr.attendance), push attendance (tz normalization)
+  - Update per-record odooStatus, odooSyncTime; append odoo_sync_results; push audit; raise alert on repeated failures
+
+  7. Face Registration
+
+  - GET /faces → filters department,search,status,page,pageSize → FaceProfile[]
+  - POST /faces → multipart fields: { name, employeeId, department, images[] }
+  - GET /faces/{id}; PUT /faces/{id}; DELETE /faces/{id}
+  - POST /faces/{id}/images → add new sample; DELETE /faces/{id}/images/{imageId}
+  - GET /faces/{id}/images → signed URLs
+
+  8. Alerts & Notifications
+
+  - GET /alerts → filters level,acknowledged,cameraId,page,pageSize → Alert[]
+  - POST /alerts/{id}/acknowledge → updated Alert
+  - POST /alerts/{id}/mute → { durationMinutes? } → updated
+  - DELETE /alerts/{id} → clear
+  - GET /notifications → NotificationItem[]; POST /notifications/{id}/acknowledge
+  - WS channels alerts and notifications push updates
+
+  9. System & Maintenance
+
+  - GET /system/summary → SystemSummary (activeCameras, registeredPeople, peopleDetectedToday, unknownFaceAlerts, manualOverrides, attendanceCompletion, lastSync)
+  - GET /system/health/metrics → resource usage series (cpu/gpu/memory/disk/network)
+  - GET /system/health/services → SystemServiceStatus[] (status, uptime, version, lastRestart)
+  - GET /system/network-metrics → latency/throughput
+  - POST /system/commands/restart-streams (Admin)
+  - POST /system/commands/refresh-feeds (Admin)
+  - GET /system/uptime, GET /system/version
+  - GET /shifts → ShiftSchedule[]
+  - GET /services/banner-messages, POST /services/banner-messages (Admin)
+
+  10. Developer Console
+
+  - GET /developer/endpoints → { id, label, description, method, path }[]
+  - POST /developer/endpoints/{id}/invoke → proxied call with safe allowlist; returns raw JSON ({ status, headers, body })
+  - GET /developer/system (sanitized), GET /developer/jobs queues snapshot
+
+  11. Settings, i18n, Preferences
+
+  - GET /i18n/languages (options), GET /settings/timezones
+  - GET /settings/preferences, PUT /settings/preferences (per-user UI settings)
+  - GET/PUT /settings/detection-thresholds, GET/PUT /settings/features (flags)
+
+  12. Exports & Files
+
+  - POST /exports → { type, filters } → { jobId }
+  - GET /exports → list jobs + statuses
+  - GET /exports/{jobId} → status + download URL (signed)
+  - DELETE /exports/{jobId}
+  - GET /files/{id} (signed access), POST /files (pre-signed upload), DELETE /files/{id}
+
+  UI → API Coverage Matrix (Key Calls)
+
+  - Dashboard: /system/summary, /alerts?limit, /notifications, /cameras/summary
+  - Live View: /cameras, /detections/live?cameraId, /detections/send-frame, /detections/test-provider, /detections/provider/config, /detections/events?limit
+  - Attendance: /attendance/logs (with filters), /attendance/statistics?category=hour|day|camera, /attendance/export, /attendance/pending, /odoo/config, /odoo/logs, /attendance/push-odoo (via /odoo/sync)
+  - Settings:
+      - Cameras: /cameras, /cameras/{id}/state, /cameras/{id}/test-connection, /cameras/import|export
+      - Users/Roles: /users, /roles, /users/{id}
+      - Odoo: /odoo/config|test|logs|sync
+      - Detection provider: /detections/provider/config, /detections/test-provider, /detections/events
+      - Backup/restore: /cameras/import|export, /exports
+  - Face Register: /faces, /faces/{id}, /faces/{id}/images
+  - Alerts: /alerts, /alerts/{id}/acknowledge|mute|delete
+  - System Health: /system/health/metrics, /system/health/services, /system/network-metrics, /shifts
+  - Audit Log: /audit
+  - Person History: /history/person/{employeeId}
+  - Dev Console: /developer/endpoints, /developer/endpoints/{id}/invoke
+
+  Key Schemas (Fields)
+
+  - Camera: { id, name, location, streamType, status, fps, latency, bitrate, resolution, lastSeen, ipAddress, tags[], thumbnail, streamUrl?, lastChecked?, enabled? }
+  - AttendanceLog: { id, employeeId, name, department, date, timeIn, timeOut, cameraId, cameraName, accuracy, status: 'present'|'late'|'missed', odooStatus: 'synced'|'pending'|'failed', odooSyncTime? }
+  - PersonDetection: { id, personId, name, cameraId, confidence, timestamp, trackId, boundingBox{top,left,width,height}, thumbnail, status }
+  - OdooIntegrationConfig: { baseUrl, database, company, apiKey?, autoSync, status: 'connected'|'disconnected'|'error', lastSync?, pendingCount, failureCount }
+  - DetectionProviderConfig: { providerName, endpoint, apiKey?, enabled, status: 'connected'|'degraded'|'offline', lastHeartbeat?, averageLatencyMs }
+  - DetectionEventLog: { id, cameraId, cameraName, timestamp, status: 'received'|'processing'|'error', latencyMs, payload: object }
+
+  Security
+
+  - OAuth2/JWT (15m access, 14d refresh), refresh rotation, revoke on logout.
+  - RBAC: Admin/Operator/Viewer route guards; permission strings for fine-grain (e.g., cameras:update, attendance:export).
+  - Input validation with Pydantic; coherent error codes; 422 on validation failure.
+  - Rate limiting on auth, exports, developer endpoints.
+  - CORS restricted to front-end origin(s).
+  - Secrets: env vars or vault; encrypt stored API keys (Odoo, detection).
+
+  Background Jobs (Celery)
+
+  - detection.capture: frame extraction → provider POST → normalize/store → WS broadcast
+  - detection.heartbeat: periodic provider health check → update config.status → raise alerts if degraded/offline
+  - odoo.sync: batch push attendance with retries/backoff; update per-record status/logs; metrics
+  - exports.generate: create CSV/PDF; upload to S3; update job status
+  - alerts.escalate: unresolved high severity → notifications
+  - system.collect-metrics: poll resource/network stats for charts
+  - camera.watchdog: offline detection → alerts
+
+  Environments & Config
+
+  - Env vars: DATABASE_URL, REDIS_URL, SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE, ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL, S3_ENDPOINT, S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY, ODOO_BASE_URL, ODOO_DB, ODOO_API_KEY,
+    DETECT_BASE_URL, DETECT_API_KEY, ALLOWED_ORIGINS, RATE_LIMITS, LOG_LEVEL
+  - Docker Compose: api, worker, scheduler (beat), redis, postgres, minio, optional nginx reverse proxy
+
+  Non-Functional
+
+  - Performance: sub-200ms median for read endpoints; provider test under configurable SLA; pagination across tables.
+  - Reliability: idempotent writes, retries on outbound calls, dead-letter queues for repeated failures.
+  - Compliance: audit trail for sensitive operations; PII handling for face data; retention policy.
+
+  Testing & QA
+
+  - Contract: verify request/response shapes vs OpenAPI (schemathesis).
+  - E2E: critical flows (send detection frame, Odoo sync, export).
+  - Load: high-frequency polling; WS connections.
+
+  Observability
+
+  - /metrics Prometheus scrape; dashboards: detection latency, provider status, Odoo sync success, camera uptime.
+  - Tracing spans for outbound calls (detection/Odoo).
+  - Centralized error tracking (Sentry/Elastic).
+
+  Risks & Mitigations
+
+  - Provider variability → adapter abstraction + schema mapping table; robust error parsing.
+  - Odoo quirks/timezones → JSON-RPC wrapper with clear mapping & test sandbox credentials.
+  - Stream handling complexity → start with snapshots + external HLS proxy; plan for WebRTC later if needed.
+
+  Roadmap & Milestones
+
+  - Week 1: Scaffold FastAPI app, config, auth/RBAC, base models + migrations, health endpoints, CI pipeline.
+  - Week 2: Cameras module (CRUD, test-connection, summary, import/export), snapshots integration, audit logs.
+  - Week 3: Detection provider (config/test), Celery pipeline for send-frame, detection events, live list, WS push.
+  - Week 4: Attendance logs (filters, stats, export job), dashboard summary, exports storage + signed URLs.
+  - Week 5: Odoo integration (config/test), sync worker, logs/status dashboard, error handling/alerts.
+  - Week 6: Faces module (multipart upload, images mgmt), person history, alerts/notifications (WS), system metrics & services.
+  - Week 7: Developer console, preferences/i18n/timezone, maintenance commands, rate limiting, polishing.
+  - Week 8: Load testing, security hardening, full documentation, Docker deploy, acceptance run-through with UI.
+
+  Acceptance Criteria (Per Module)
+
+  - Auth: Login/refresh/logout work; role-based visibility enforced; audit entries created.
+  - Cameras: UI can add/edit/remove; toggle enabled; test connection returns metrics; backup/restore works; thumbnails load.
+  - Live View: Detections list updates via polling; send-frame returns event and logs; provider test shows status/latency.
+  - Attendance: Filters return correct rows; stats render; export produces downloadable CSV/PDF; Odoo counts/status reflect operations.
+  - Odoo: Config save/test; sync triggers and updates per-record statuses; logs show success/failure reasons.
+  - Settings: Detection provider & Odoo panels update and reflect state; users/roles change in UI; backups show JSON; restore applies.
+  - Alerts/Notifications: Acknowledge/mute/clear; dropdown updates; WS pushes (optional).
+  - System: Health charts populate; services list shows statuses; commands gated to Admin.
+  - Faces/History: Register faces with images; history page lists appearances with thumbnails; timeline consistent.
+
+  This plan covers every API, contract, background process, and operational element your front-end expects. If you want, I can convert this into a living OpenAPI spec and initial FastAPI scaffolding next.
+
+
+› are you sure you didn't missed any detils ?
+
+
+⚠ Heads up, you've used over 95% of your weekly limit. Run /status for a breakdown.
+
+• The user is seeking reassurance and might want additional details or a gap analysis. I need to be concise but thorough in my response. I should conduct a cross-check between UI modules and endpoint coverage,
+  then outline edge cases and nonfunctional concerns that haven’t been discussed.
+
+  I’ll create a checklist that highlights potential missing details such as authentication flows, pagination, error codes, and specific models. I'll also mention operations details and examples without using
+  code or heavy formatting.
+
+  Reviewing final answer guidelines
+
+  The style guidelines allow for section headers and bullets without heavy formatting. I can use inline code but should avoid tables. Bullet lists can be 4-6 items, but I can include more if needed while
+  staying concise.
+
+  I’ll present a "gap audit" that includes overlooked items and propose additional details. This may involve WebSocket payloads, standardized envelopes, error codes, and other specifics like API versioning and
+  retention policies. Also, it seems Docker's earlier issues are resolved, which isn't relevant now.
+
+  Outlining additional proposal items
+
+  I’m thinking about what else to include, like numeric constants for limits, data constraints, sorting options, and webhook signatures. I should also mention security items, like the content security policy
+  and encryption for sensitive columns.
+
+  Additionally, backup and restore operations for all configurations, not just cameras, should be noted. I’ll provide a sample WebSocket message structure. For organization, I’ll use section headers like
+  Coverage Validation and Error Model. I aim for 10-30 bullets, keeping things concise, while reassuring the user about the overall plan and detailing the additional items we've included.
+
+  Verifying final plan details
+
+  I need to ensure that I’m avoiding any heavy code or formatting, while still using inline code for endpoints. It’s essential to adapt to what the user wants, as they are looking for a "proper plan with every
+  detail." I should formulate my message as a final verification pass.
+
+  I’ll start with a statement confirming the comprehensiveness of the plan and then present a completeness audit along with added details. For structure, I’ll create about 12 sections, beginning with a UI-to-
+  API mapping checklist to detail each UI page and its corresponding endpoints.
+
+  Restating missed details
+
+  I should concisely restate items I might have initially missed, such as "System Health & Maintenance," "Audit Trail," and others, totaling 12.
+
+  I want to cover essential details like standard API envelope structure, sorting conventions, WebSocket message types, and error code taxonomy. I’ll also add information on idempotency keys, exporting job
+  statuses, Odoo specifics, detection provider details, security policies, and performance budgets. I need to confirm some unknowns like the type of Odoo being used.
+
+  While I should aim for conciseness, it’s acceptable to provide a bit more detail for clarity, using headers and bullets throughout.
+
+─ Worked for 25s ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Short answer: it’s comprehensive. To be absolutely certain the GUI runs perfectly against the backend, I did a completeness audit and filled in every operational/detail gap below.
+
+  Coverage Validation
+
+  - Dashboard: GET /system/summary, GET /alerts?limit, GET /cameras/summary, GET /notifications
+  - Live View: GET /cameras, GET /detections/live?cameraId, POST /detections/send-frame, POST /detections/test-provider, GET /detections/provider/config, GET /detections/events?limit, WS channel detections
+  - Attendance: GET /attendance/logs (all filters), GET /attendance/statistics?category=hour|day|camera, POST /attendance/manual, POST /attendance/export, GET /attendance/pending, GET /odoo/config, GET /odoo/
+    logs, POST /odoo/sync
+  - Face Register: GET /faces, POST /faces (multipart), GET/PUT/DELETE /faces/{id}, POST /faces/{id}/images, DELETE /faces/{id}/images/{imageId}
+  - Alerts: GET /alerts, POST /alerts/{id}/acknowledge, POST /alerts/{id}/mute, DELETE /alerts/{id}, WS channel alerts
+  - Settings: Cameras (GET/POST/PUT/PATCH/DELETE /cameras, POST /cameras/{id}/test-connection, POST /cameras/{id}/snapshot, GET /cameras/export, POST /cameras/import), Users/Roles (GET /users, PUT /users/{id},
+    GET /roles), Odoo (GET/PUT /odoo/config, POST /odoo/test, GET /odoo/logs, POST /odoo/sync), Detection provider (GET/PUT /detections/provider/config, POST /detections/test-provider, GET /detections/events?
+    limit)
+  - System Health: GET /system/health/metrics, GET /system/health/services, GET /system/network-metrics, POST /system/commands/restart-streams, POST /system/commands/refresh-feeds
+  - Audit & History: GET /audit, GET /history/person/{employeeId}
+  - Developer Console: GET /developer/endpoints, POST /developer/endpoints/{id}/invoke
+  - i18n/Timezone/Prefs: GET /i18n/languages, GET /settings/timezones, GET/PUT /settings/preferences
+  - Exports & Files: POST /exports, GET /exports/{jobId}, DELETE /exports/{jobId}, GET /files/{id}
+
+  Standard API Contracts
+
+  - Envelope: success → { success: true, data, meta? }; error → { success: false, error: { code, message, details? } }
+  - Pagination: query page, pageSize; response meta { page, pageSize, total, totalPages }
+  - Sorting: query sortBy, sortDir=asc|desc (default sensible per endpoint)
+  - Filtering: exact parameter names used by UI (search, cameraId, dateFrom, dateTo, odooStatus)
+  - Time: ISO 8601 UTC; latencies/durations as milliseconds (integers)
+
+  WebSocket Contracts
+
+  - Endpoint: /ws (JWT required via header or query)
+  - Subscribe: { action: 'subscribe', channel: 'detections'|'camera-status'|'alerts'|'notifications', cameraId? }
+  - Unsubscribe: { action: 'unsubscribe', channel, cameraId? }
+  - Heartbeat: server ping every 30s; client must pong within 15s; disconnect after 2 misses
+  - Events:
+      - detections: { type:'detection', cameraId, detection: PersonDetection }
+      - camera-status: { type:'camera-status', cameraId, status, lastSeen }
+      - alerts: { type:'alert', alert: Alert }
+      - notifications: { type:'notification', notification: NotificationItem }
+
+  Error Taxonomy
+
+  - AUTH_UNAUTHORIZED, AUTH_FORBIDDEN, AUTH_TOKEN_EXPIRED
+  - VALIDATION_ERROR (422), NOT_FOUND, CONFLICT, RATE_LIMITED
+  - INTEGRATION_ODOO_xxx (e.g., ODOO_AUTH_FAILED, ODOO_BAD_REQUEST)
+  - INTEGRATION_DETECT_xxx (e.g., DETECT_TIMEOUT, DETECT_BAD_RESPONSE)
+  - MEDIA_SNAPSHOT_FAILED, EXPORT_FAILED, STORAGE_ERROR
+  - Always include requestId in response headers for tracing
+
+  Idempotency & Concurrency
+
+  - Idempotency key (header Idempotency-Key) for POSTs that can be retried: attendance/manual, detections/send-frame, exports, odoo/sync
+  - Optimistic locking via version columns for cameras, odoo_configs, detection_provider_config
+  - Unique constraints: cameras.id, users.email, face_profiles.employeeId
+
+  Export Jobs (State Machine)
+
+  - States: queued → processing → completed|failed; GET /exports/{jobId} returns state + downloadUrl? + error?
+  - TTLs: artifacts retained 7–30 days (configurable), GC job cleans expired
+  - Formats: CSV (UTF-8, RFC 4180), PDF (A4 landscape for tables)
+
+  Odoo Integration (JSON-RPC)
+
+  - Endpoint: {baseUrl}/jsonrpc
+  - Auth: API key stored encrypted; config: { baseUrl, database, company, apiKey, autoSync, timezone }
+  - Method: execute_kw on model hr.attendance (or configured module)
+  - Field mapping: employee_id (bridged from local employeeId), check_in, check_out, custom fields (optional): x_accuracy
+  - Timezone conversion: UI local times → UTC → Odoo target timezone if required
+  - Sync: batch size (e.g., 100), exponential backoff, dead-letter after N failures; GET /odoo/status surfaces pendingCount, failureCount, lastSync
+  - Logs: OdooSyncLog includes per-record result and message; visible in UI
+
+  Detection Provider Contract
+
+  - Config: { providerName, endpoint, apiKey, enabled, status, lastHeartbeat, averageLatencyMs }
+  - Request modes:
+      - Base64 JPEG: { cameraId, timestamp, image: 'data:image/jpeg;base64,...' }
+      - URL mode: { cameraId, timestamp, imageUrl } (if provider can fetch)
+  - Response normalization:
+      - Success: { status:'ok', latencyMs, detections: [{ personId?, name?, confidence, bbox:{x,y,w,h}, attributes? }] }
+      - Error: { status:'error', code, message }
+  - Limits: max image 1920x1080 or 512KB base64 (configurable)
+  - Health: POST /detections/test-provider pings provider; detection.heartbeat Celery task updates status to connected|degraded|offline
+
+  Media/Snapshots
+
+  - POST /cameras/{id}/snapshot uses FFmpeg or RTSP -frames:v 1 to capture, uploads to S3/MinIO, returns signed URL
+  - HLS/WebRTC assumed managed by media layer; API issues signed access links if protected
+  - Retention: snapshots 24–72h (configurable), thumbnails longer (e.g., 14–30 days)
+
+  Security & Compliance
+
+  - JWT access 15m, refresh 14d; refresh rotation; revoke on logout
+  - RBAC: Admin/Operator/Viewer + fine-grained permissions (attendance:export, cameras:update, etc.)
+  - Rate limits: login 5/min per IP; exports 5/hour per user; developer 30/min; general 120/min per user/IP
+  - CORS: restrict to frontend origins; CSRF not applicable to token auth; set secure headers
+  - Secrets: runtime env or secret manager; API keys encrypted at rest (AES-GCM) + rotated keys
+  - PII: face data flagged sensitive; retention policy (e.g., 90 days for raw images unless opted-in); right-to-delete support
+
+  - /metrics Prometheus with key SLIs: detection latency p95, provider availability, Odoo sync success rate, camera uptime, API latency p50/p95, job queue depths
+  - Tracing for outbound calls (Odoo/detection) via OpenTelemetry
+  - Runbooks: rotate provider keys, verify Odoo credentials, restart streams, clear DLQ, restore backups, export data for compliance
+  - Backups: nightly Postgres backup, versioned S3 bucket for artifacts/config
+
+  Data Retention & GC
+
+  - Detection events: 30–90 days; Attendance logs as per policy; Audit logs 180–365 days; Notifications 30 days; Exports 7–30 days
+  - Scheduled clean-up Celery task with dry-run mode
+
+  Performance Targets
+
+  - Read endpoints median < 200 ms; writes < 300 ms
+  - Subscriptions: WS fan-out to 100–1000 clients; WS ping/pong every 30s
+  - Provider test: < 500 ms median (network dependent)
+
+  Versioning & Deprecation
+
+  - Prefix /api/v1; non-breaking changes only in v1; deprecate endpoints with Deprecation header; publish changelog with impact
+
+  Acceptance Checklist
+
+  - GUI flows click through with real data: Dashboard counters, Live detections feed, Send frame/Test provider, Attendance filters/exports, Odoo configuration/test/sync, Camera CRUD/test/snapshot, Face create/
+    list/images, Alerts acknowledge/mute/clear, System metrics/services page, Audit view, Person history view, Developer console invocations
+  - Polling returns correct shapes; WS pushes render without errors
+  - Role visibility: Admin sees all; Operator limited; Viewer read-only
+  - Exports downloadable; signed URLs work; artifacts retained then GC’d
+  - Error states shown: provider degraded/offline, Odoo failures, stream disconnects; UI receives actionable messages
+
+  Open Decisions (confirm to finalize)
+
+  - Odoo edition (On-prem vs Odoo.sh) and exact attendance model/fields
+  - Detection provider API specification (base64 vs URL, headers, response schema)
+  - Streaming strategy (in-house HLS/WebRTC vs external service)
+  - Retention durations and compliance rules per region/tenant
+  - Rate limit numbers for your operational policy
+
+  If you confirm those open decisions (especially Odoo and the detection provider’s exact API), I can turn this into an OpenAPI spec and a FastAPI scaffolding plan with Pydantic models and route stubs matching
+  everything above.
+
+
+› you missed what response should back from backend based on what request.
+
+
+• The guidelines suggest using backticks for commands and small examples, but they don’t specifically mention large code blocks. While large JSON examples could be split into smaller samples for clarity, I
+  think it’s crucial to stay safe. Maybe using inline formatting with indentation is best, along with a prefix like “Example response:”. I could try using triple backticks for larger formats since they didn’t
+  explicitly forbid it. Ultimately, I aim for moderate formatting while adhering to guidelines.
+
+─ Worked for 19s ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+• Conventions
+
+  - Base URL: /api/v1
+  - Auth: Authorization: Bearer <jwt>
+  - Content-Type: application/json unless stated
+  - Envelope:
+      - Success: { "success": true, "data": <payload>, "meta": { ... } }
+      - Error: { "success": false, "error": { "code": "STRING_CODE", "message": "human text", "details": { ... } }, "requestId": "uuid" }
+  - Pagination: query page, pageSize; response meta: { page, pageSize, total, totalPages }
+  - Idempotency (for retriable POST): header Idempotency-Key: <uuid>
+  - Time: ISO 8601 UTC; durations in milliseconds as integers
+
+  Auth & Users
+
+  - POST /auth/login
+      - Body: { "username": "admin", "password": "******" }
+      - 200: { "success": true, "data": { "accessToken": "...", "refreshToken": "...", "user": { "id":"USR-1","name":"Admin","email":"a@b.com","roleId":"ROLE-ADMIN","status":"active","lastActive":"..." } } }
+      - 401/422 error envelope
+  - POST /auth/refresh
+      - Body: { "refreshToken": "..." }
+      - 200: { "success": true, "data": { "accessToken":"...", "refreshToken":"..." } }
+  - POST /auth/logout
+      - Body: { "refreshToken":"..." }
+      - 204: no body
+  - GET /auth/me
+      - 200: { "success": true, "data": { "user": { ...UserAccount }, "permissions": ["cameras:read", "..."] } }
+  - GET /users
+      - Query: role, status, search, page, pageSize
+      - 200: { "success": true, "data": [ ...UserAccount ], "meta": { ... } }
+  - POST /users
+      - Body: { "name":"", "email":"", "roleId":"", "password":"optional" }
+      - 201: { "success": true, "data": { ...UserAccount } }
+      - 409 on duplicate email
+  - GET /users/{id} / PUT /users/{id} / DELETE /users/{id}
+      - 200: { "success": true, "data": { ...UserAccount } } or 204 on delete
+  - PATCH /users/{id}/password
+      - Body: { "oldPassword":"", "newPassword":"" }
+      - 204
+  - GET /roles
+      - 200: { "success": true, "data": [ { "id":"ROLE-ADMIN","name":"Admin","permissions":[...],"description":"" }, ... ] }
+
+  Cameras
+
+  - GET /cameras
+      - Query: status, streamType, enabled, search, page, pageSize
+      - 200: { "success": true, "data": [ ...Camera ], "meta": { ... } }
+  - POST /cameras
+      - Body: { "name":"Gate A","location":"Lobby","streamType":"RTSP","streamUrl":"rtsp://...","enabled":true }
+      - 201: { "success": true, "data": { ...Camera } }
+  - GET /cameras/{id}
+      - 200: { "success": true, "data": { ...Camera } }
+  - PUT /cameras/{id}
+      - Body: Partial<Camera>
+      - 200: { "success": true, "data": { ...Camera } }
+  - PATCH /cameras/{id}/state
+      - Body: { "enabled": true }
+      - 200: { "success": true, "data": { ...Camera } }
+  - DELETE /cameras/{id}
+      - 204
+  - POST /cameras/{id}/test-connection
+      - 200: { "success": true, "data": { "success": true, "latencyMs": 42, "bitrate": 6.5, "message": "OK" } }
+      - 200 with "success": false for negative tests
+  - POST /cameras/{id}/snapshot
+      - 201: { "success": true, "data": { "assetId":"FILE-123","url":"https://...signed","timestamp":"..." } }
+  - GET /cameras/summary
+      - 200: { "success": true, "data": [ { "id":"CAM-1","detectionsToday":12,"unknownFaces":1,"uptimePercent":99.2 }, ... ] }
+  - POST /cameras/import
+      - Body: { "cameras": [ ...Camera ] , "mode":"merge|replace" }
+      - 202: { "success": true, "data": { "imported": N, "updated": M, "skipped": K } }
+  - GET /cameras/export
+      - 200: { "success": true, "data": { "cameras": [ ...Camera ] } }
+
+  Media & Streams
+
+  - GET /media/hls/{cameraId}/index.m3u8 (HLS manifest; media content)
+  - GET /media/snapshot/{cameraId}.jpg (image content)
+  - GET /media/ws/{cameraId} (WebRTC/MJPEG; upgraded connection)
+  - POST /media/snapshot
+      - Body: { "cameraId":"CAM-1" }
+      - 201: { "success": true, "data": { "assetId":"...", "url":"...", "timestamp":"..." } }
+
+  Detections & Provider
+
+  - GET /detections/live
+      - Query: cameraId, limit
+      - 200: { "success": true, "data": [ ...PersonDetection ] }
+  - GET /detections/events
+      - Query: status, cameraId, from, to, page, pageSize
+      - 200: { "success": true, "data": [ ...DetectionEventLog ], "meta": { ... } }
+  - POST /detections/send-frame
+      - Body: { "cameraId":"CAM-1" }
+      - 202: { "success": true, "data": { "jobId":"DET-JOB-123", "status":"queued" } }
+  - POST /detections/test-provider
+      - 200: { "success": true, "data": { "status":"connected|degraded|offline", "latencyMs": 180, "message":"..." } }
+  - GET /detections/provider/config
+      - 200: { "success": true, "data": { ...DetectionProviderConfig } }
+  - PUT /detections/provider/config
+      - Body: Partial<DetectionProviderConfig> (providerName, endpoint, apiKey, enabled)
+      - 200: { "success": true, "data": { ...DetectionProviderConfig } }
+
+  Attendance & Analytics
+
+  - GET /attendance/logs
+      - Query: search, cameraId, dateFrom, dateTo, odooStatus, page, pageSize
+      - 200: { "success": true, "data": [ ...AttendanceLog ], "meta": { ... }, "summary": { "present": N, "late": N, "missed": N, "total": N } }
+  - POST /attendance/manual
+      - Body: { "employeeId":"EMP-00123","cameraId":"CAM-1","timestamp":"...","status":"present","note":"Optional" }
+      - 201: { "success": true, "data": { ...AttendanceLog } }
+  - DELETE /attendance/{id}
+      - 204
+  - GET /attendance/statistics
+      - Query: category=hour|day|camera
+      - 200: { "success": true, "data": [ ...AttendanceStatisticPoint ] }
+  - POST /attendance/export
+      - Body: { "format":"csv|pdf", "filters": { ...same as GET logs... } }
+      - 202: { "success": true, "data": { "jobId":"EXP-123", "status":"queued" } }
+  - GET /attendance/pending
+      - 200: { "success": true, "data": { "pendingCount": 5, "failedCount": 1 } }
+
+  Odoo Integration
+
+  - GET /odoo/config
+      - 200: { "success": true, "data": { ...OdooIntegrationConfig } }
+  - PUT /odoo/config
+      - Body: Partial<OdooIntegrationConfig> (baseUrl, database, company, apiKey, autoSync)
+      - 200: { "success": true, "data": { ...OdooIntegrationConfig } }
+  - POST /odoo/test
+      - 200: { "success": true, "data": { "ok": true, "details": "Authenticated to DB 'odoo_db'." } }
+  - GET /odoo/logs
+      - Query: result=success|failure, from, to, limit, page, pageSize
+      - 200: { "success": true, "data": [ ...OdooSyncLog ], "meta": { ... } }
+  - POST /odoo/sync
+      - Body: { "recordIds": ["ATT-1","ATT-2"] } (optional; if missing, sync all pending)
+      - 202: { "success": true, "data": { "queued": 2, "skipped": 0 } }
+  - GET /odoo/status
+      - 200: { "success": true, "data": { "pendingCount": 3, "failureCount": 1, "lastSync": "...", "status":"connected|disconnected|error" } }
+  - POST /integrations/odoo/webhook (optional)
+      - Headers: X-Signature: HMAC...
+      - Body: provider-specific ack; 202 on accept
+
+  Face Registration
+
+  - GET /faces
+      - Query: department, search, status, page, pageSize
+      - 200: { "success": true, "data": [ ...FaceProfile ], "meta": { ... } }
+  - POST /faces (multipart/form-data)
+      - Fields: name, employeeId, department, images[] (file)
+      - 201: { "success": true, "data": { ...FaceProfile } }
+  - GET /faces/{id} / PUT /faces/{id} / DELETE /faces/{id}
+      - 200 or 204 accordingly
+  - POST /faces/{id}/images (multipart)
+      - 201: { "success": true, "data": { "imageId":"IMG-1","url":"..."} }
+  - DELETE /faces/{id}/images/{imageId}
+      - 204
+  - GET /faces/{id}/images
+      - 200: { "success": true, "data": [ { "imageId":"IMG-1","url":"...","createdAt":"..." }, ... ] }
+
+  Alerts & Notifications
+
+  - GET /alerts
+      - Query: level, acknowledged, cameraId, page, pageSize
+      - 200: { "success": true, "data": [ ...Alert ], "meta": { ... } }
+  - POST /alerts/{id}/acknowledge
+      - 200: { "success": true, "data": { ...Alert } }
+  - POST /alerts/{id}/mute
+      - Body: { "durationMinutes": 60 } (optional)
+      - 200: { "success": true, "data": { ...Alert } }
+  - DELETE /alerts/{id}
+      - 204
+  - GET /notifications
+      - 200: { "success": true, "data": [ ...NotificationItem ] }
+  - POST /notifications/{id}/acknowledge
+      - 200: { "success": true, "data": { ...NotificationItem } }
+
+  System & Maintenance
+
+  - GET /system/summary
+      - 200: { "success": true, "data": { "activeCameras":10,"registeredPeople":120,"peopleDetectedToday":85,"unknownFaceAlerts":2,"manualOverrides":1,"attendanceCompletion":92,"lastSync":"..." } }
+  - GET /system/health/metrics
+      - 200: { "success": true, "data": [ ...SystemHealthMetric ] }
+  - GET /system/health/services
+      - 200: { "success": true, "data": [ ...SystemServiceStatus ] }
+  - GET /system/network-metrics
+      - 200: { "success": true, "data": [ { "id":"NET-1","label":"RTT","value":12.4,"unit":"ms","trend":"up","change":0.3 }, ... ] }
+  - POST /system/commands/restart-streams (Admin)
+      - 202: { "success": true, "data": { "accepted": true, "message":"Restart scheduled" } }
+  - POST /system/commands/refresh-feeds (Admin)
+      - 202 similar
+  - GET /system/uptime
+      - 200: { "success": true, "data": { "uptimeSeconds": 123456 } }
+  - GET /system/version
+      - 200: { "success": true, "data": { "api":"1.0.0","commit":"abc123","buildDate":"..." } }
+  - GET /shifts
+      - 200: { "success": true, "data": [ ...ShiftSchedule ] }
+  - GET /services/banner-messages
+      - 200: { "success": true, "data": [ "Message 1", "Message 2", ... ] }
+  - POST /services/banner-messages (Admin)
+      - Body: { "messages": [ "..." ] }
+      - 200: same list
+
+  Developer Console
+
+  - GET /developer/endpoints
+      - 200: { "success": true, "data": [ { "id":"DEV-001","label":"Cameras","description":"Returns cameras","method":"GET","path":"/api/v1/cameras" }, ... ] }
+  - POST /developer/endpoints/{id}/invoke
+      - Body: { "payload": { ...optional... } }
+      - 200: { "success": true, "data": { "status": 200, "headers": { ... }, "body": { ...rawJson } } }
+
+  i18n, Preferences & Settings
+
+  - GET /i18n/languages
+      - 200: { "success": true, "data": [ { "code":"en","label":"English","isDefault":true }, ... ] }
+  - GET /settings/timezones
+      - 200: { "success": true, "data": [ "UTC", "Asia/Dhaka", ... ] }
+  - GET /settings/preferences
+      - 200: { "success": true, "data": { "theme":"dark","gridMode":"3x3","autoRotate":true, ... } }
+  - PUT /settings/preferences
+      - Body: Partial<Preferences>
+      - 200: { "success": true, "data": { ...Preferences } }
+
+  Exports & Files
+
+  - POST /exports
+      - Body: { "type":"attendance|audit|history", "format":"csv|pdf", "filters": { ... } }
+      - 202: { "success": true, "data": { "jobId":"EXP-123", "status":"queued" } }
+  - GET /exports
+      - Query: page, pageSize
+      - 200: { "success": true, "data": [ { "jobId":"EXP-123","type":"attendance","format":"csv","status":"completed","createdAt":"...","downloadUrl":"https://...signed" }, ... ], "meta": { ... } }
+  - GET /exports/{jobId}
+      - 200: { "success": true, "data": { "jobId":"EXP-123","status":"completed|processing|failed|queued","downloadUrl":"https://...signed","error": null } }
+  - DELETE /exports/{jobId}
+      - 204
+  - GET /files/{id}
+      - 200: { "success": true, "data": { "url":"https://...signed","contentType":"image/jpeg","expiresIn":3600 } }
+  - POST /files (pre-signed upload)
+      - Body: { "contentType":"image/jpeg","filename":"thumb.jpg" }
+      - 200: { "success": true, "data": { "uploadUrl":"https://...signed","fileId":"FILE-123" } }
+  - DELETE /files/{id}
+      - 204
+
+  WebSockets
+
+  - Endpoint: /ws (JWT)
+  - Subscribe: { "action":"subscribe", "channel":"detections", "cameraId":"CAM-1" }
+  - Unsubscribe: { "action":"unsubscribe", "channel":"detections", "cameraId":"CAM-1" }
+  - Events:
+      - Detection: { "type":"detection","cameraId":"CAM-1","detection": { ...PersonDetection } }
+      - Camera status: { "type":"camera-status","cameraId":"CAM-1","status":"online|offline|maintenance","lastSeen":"..." }
+      - Alert: { "type":"alert","alert": { ...Alert } }
+      - Notification: { "type":"notification","notification": { ...NotificationItem } }
+  - Heartbeat: server ping every 30s; client must respond with { "type":"pong" }
+
+  Error Examples
+
+  - 422 Validation:
+      - { "success": false, "error": { "code":"VALIDATION_ERROR","message":"Invalid payload","details": { "field":"reason" } }, "requestId":"..." }
+  - 401/403 Auth:
+      - { "success": false, "error": { "code":"AUTH_UNAUTHORIZED","message":"Token missing/invalid" } }
+  - Integration failures:
+      - Detection timeout: { "success": false, "error": { "code":"DETECT_TIMEOUT","message":"Provider timed out" } }
+      - Odoo auth: { "success": false, "error": { "code":"ODOO_AUTH_FAILED","message":"Invalid API key" } }
+
+  Everything Mapped to UI
+
+  - Dashboard counters, banners, alerts, notifications, camera summaries → covered
+  - Live View: cameras list, send frame, provider test, config, detection events → covered
+  - Attendance: filters, odooStatus, export, stats, pending counts → covered
+  - Odoo: config, logs, test, sync, status → covered
+  - Settings: cameras CRUD/state/test/snapshot/import/export; users/roles; detection provider config/logs/test; Odoo config/logs/test/sync; backup JSON → covered
+  - Faces: register/edit/delete/upload images; list; preview → covered
+  - Alerts & Notifications pages: list/ack/mute/clear + WS → covered
+  - System health: metrics, services, commands (restart streams/refresh feeds), shifts → covered
+  - Audit & person history: lists exact types → covered
+  - Developer console & mock invocations → covered
+  - i18n/timezone/preferences → covered
+  - Exports + files with signed URLs → covered
+  - Real-time via WS with channels & heartbeats → covered
+
+  If you want, I can now turn this into an OpenAPI 3.1 document (YAML/JSON) your team can import into Postman/Insomnia and use to scaffold FastAPI route stubs directly.
+
+
+› Improve documentation in @filename
+
+  65% context left · ? for shortcuts

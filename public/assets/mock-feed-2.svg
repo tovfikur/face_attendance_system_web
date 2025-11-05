@@ -1,0 +1,29 @@
+<svg viewBox="0 0 480 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="warehouse" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b1324" />
+      <stop offset="50%" stop-color="#111b32" />
+      <stop offset="100%" stop-color="#141c2a" />
+    </linearGradient>
+    <linearGradient id="beam" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1f2937" stop-opacity="0" />
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0.35" />
+    </linearGradient>
+  </defs>
+  <rect width="480" height="320" fill="url(#warehouse)" />
+  <g stroke="#0f3a55" stroke-width="1" opacity="0.45">
+    <path d="M0 32h480M0 64h480M0 96h480M0 128h480M0 160h480M0 192h480M0 224h480M0 256h480M0 288h480" />
+    <path d="M32 0v320M64 0v320M96 0v320M128 0v320M160 0v320M192 0v320M224 0v320M256 0v320M288 0v320M320 0v320M352 0v320M384 0v320M416 0v320M448 0v320" />
+  </g>
+  <rect x="60" y="80" width="360" height="180" rx="28" fill="url(#beam)" />
+  <path
+    d="M120 260h240M140 70l40 50M340 70l-40 50"
+    stroke="#38bdf8"
+    stroke-width="2.5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    opacity="0.6"
+  />
+  <circle cx="160" cy="150" r="26" fill="none" stroke="#38bdf8" stroke-width="2" opacity="0.6" />
+  <circle cx="320" cy="170" r="32" fill="none" stroke="#38bdf8" stroke-width="3" opacity="0.7" />
+</svg>

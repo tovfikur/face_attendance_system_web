@@ -1,0 +1,29 @@
+<svg viewBox="0 0 480 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="maintenance" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#33291b" />
+      <stop offset="100%" stop-color="#20160b" />
+    </linearGradient>
+  </defs>
+  <rect width="480" height="320" rx="24" fill="url(#maintenance)" />
+  <g stroke="#4a371f" stroke-width="1.4" opacity="0.5">
+    <path d="M0 32h480M0 64h480M0 96h480M0 128h480M0 160h480M0 192h480M0 224h480M0 256h480M0 288h480" />
+    <path d="M32 0v320M64 0v320M96 0v320M128 0v320M160 0v320M192 0v320M224 0v320M256 0v320M288 0v320M320 0v320M352 0v320M384 0v320M416 0v320M448 0v320" />
+  </g>
+  <rect x="90" y="70" width="300" height="180" rx="26" fill="#f59e0b" opacity="0.18" />
+  <path
+    d="M180 140l120 0M160 180l160 0"
+    stroke="#f59e0b"
+    stroke-width="10"
+    stroke-linecap="round"
+    opacity="0.6"
+  />
+  <circle cx="240" cy="110" r="20" fill="#facc15" opacity="0.4" />
+  <path
+    d="M210 210l60 0"
+    stroke="#facc15"
+    stroke-width="12"
+    stroke-linecap="round"
+    opacity="0.7"
+  />
+</svg>

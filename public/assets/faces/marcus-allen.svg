@@ -1,0 +1,12 @@
+<svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="marcusHair" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1f2937" />
+      <stop offset="100%" stop-color="#4b5563" />
+    </linearGradient>
+  </defs>
+  <rect width="80" height="80" rx="20" fill="#111827" />
+  <circle cx="40" cy="32" r="22" fill="url(#marcusHair)" />
+  <circle cx="40" cy="44" r="18" fill="#fb7185" opacity="0.82" />
+  <rect x="26" y="54" width="28" height="14" rx="7" fill="#f97316" opacity="0.75" />
+</svg>

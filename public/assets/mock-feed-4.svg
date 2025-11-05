@@ -1,0 +1,23 @@
+<svg viewBox="0 0 480 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="reception" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0b1220" />
+      <stop offset="45%" stop-color="#111c2d" />
+      <stop offset="100%" stop-color="#122034" />
+    </linearGradient>
+    <linearGradient id="scanLine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38bdf8" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#38bdf8" stop-opacity="0" />
+    </linearGradient>
+  </defs>
+  <rect width="480" height="320" fill="url(#reception)" />
+  <g stroke="#13334c" stroke-width="1" opacity="0.4">
+    <path d="M0 36h480M0 72h480M0 108h480M0 144h480M0 180h480M0 216h480M0 252h480M0 288h480" />
+    <path d="M36 0v320M72 0v320M108 0v320M144 0v320M180 0v320M216 0v320M252 0v320M288 0v320M324 0v320M360 0v320M396 0v320M432 0v320M468 0v320" />
+  </g>
+  <rect x="120" y="40" width="240" height="240" rx="28" fill="url(#scanLine)" />
+  <rect x="80" y="110" width="320" height="120" rx="24" fill="#0ea5e9" opacity="0.18" />
+  <circle cx="170" cy="160" r="24" fill="#38bdf8" opacity="0.36" />
+  <circle cx="310" cy="170" r="30" fill="#22d3ee" opacity="0.28" />
+  <rect x="200" y="70" width="80" height="30" rx="8" fill="#38bdf8" opacity="0.35" />
+</svg>

@@ -1,0 +1,22 @@
+<svg viewBox="0 0 480 320" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="offline" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#140a1a" />
+      <stop offset="100%" stop-color="#1c0f23" />
+    </linearGradient>
+  </defs>
+  <rect width="480" height="320" rx="24" fill="url(#offline)" />
+  <g stroke="#3f1d34" stroke-width="1.4" opacity="0.45">
+    <path d="M0 36h480M0 72h480M0 108h480M0 144h480M0 180h480M0 216h480M0 252h480M0 288h480" />
+    <path d="M36 0v320M72 0v320M108 0v320M144 0v320M180 0v320M216 0v320M252 0v320M288 0v320M324 0v320M360 0v320M396 0v320M432 0v320M468 0v320" />
+  </g>
+  <rect x="110" y="90" width="260" height="140" rx="20" fill="#dc2626" opacity="0.2" />
+  <path
+    d="M190 140l100 0"
+    stroke="#dc2626"
+    stroke-width="12"
+    stroke-linecap="round"
+    opacity="0.85"
+  />
+  <circle cx="240" cy="210" r="14" fill="#dc2626" opacity="0.75" />
+</svg>
