@@ -2,6 +2,8 @@
 User and authentication schemas.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Optional
 
@@ -9,48 +11,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 
 # ============================================================================
-# Authentication Schemas
-# ============================================================================
-
-
-class LoginRequest(BaseModel):
-    """User login request."""
-
-    username: EmailStr = Field(..., description="User email")
-    password: str = Field(..., description="User password", min_length=1)
-
-
-class TokenResponse(BaseModel):
-    """Token response."""
-
-    accessToken: str = Field(..., description="JWT access token")
-    refreshToken: str = Field(..., description="JWT refresh token")
-    tokenType: str = Field(default="bearer", description="Token type")
-    expiresIn: int = Field(..., description="Token expiration in seconds")
-
-
-class RefreshTokenRequest(BaseModel):
-    """Refresh token request."""
-
-    refreshToken: str = Field(..., description="Refresh token")
-
-
-class LoginResponse(BaseModel):
-    """Login response."""
-
-    accessToken: str = Field(..., description="JWT access token")
-    refreshToken: str = Field(..., description="JWT refresh token")
-    user: "UserResponse" = Field(..., description="User information")
-
-
-class LogoutRequest(BaseModel):
-    """Logout request."""
-
-    refreshToken: str = Field(..., description="Refresh token to revoke")
-
-
-# ============================================================================
-# User Schemas
+# User Schemas (defined first so they can be referenced by authentication)
 # ============================================================================
 
 
@@ -102,6 +63,47 @@ class UserListResponse(BaseModel):
     total: int = Field(..., description="Total users")
 
 
+# ============================================================================
+# Authentication Schemas
+# ============================================================================
+
+
+class LoginRequest(BaseModel):
+    """User login request."""
+
+    username: EmailStr = Field(..., description="User email")
+    password: str = Field(..., description="User password", min_length=1)
+
+
+class TokenResponse(BaseModel):
+    """Token response."""
+
+    accessToken: str = Field(..., description="JWT access token")
+    refreshToken: str = Field(..., description="JWT refresh token")
+    tokenType: str = Field(default="bearer", description="Token type")
+    expiresIn: int = Field(..., description="Token expiration in seconds")
+
+
+class RefreshTokenRequest(BaseModel):
+    """Refresh token request."""
+
+    refreshToken: str = Field(..., description="Refresh token")
+
+
+class LoginResponse(BaseModel):
+    """Login response."""
+
+    accessToken: str = Field(..., description="JWT access token")
+    refreshToken: str = Field(..., description="JWT refresh token")
+    user: UserResponse = Field(..., description="User information")
+
+
+class LogoutRequest(BaseModel):
+    """Logout request."""
+
+    refreshToken: str = Field(..., description="Refresh token to revoke")
+
+
 class ChangePasswordRequest(BaseModel):
     """Change password request."""
 
@@ -123,9 +125,40 @@ class PasswordResetConfirm(BaseModel):
     password: str = Field(..., description="New password", min_length=8)
 
 
+class UserPreferencesUpdate(BaseModel):
+    """User preferences update schema."""
+
+    language: Optional[str] = Field(None, description="User language preference")
+    theme: Optional[str] = Field(None, description="User theme preference (light, dark, auto)")
+    notifications: Optional[dict] = Field(None, description="Notification preferences")
+    timezone: Optional[str] = Field(None, description="User timezone")
+
+
 # ============================================================================
 # Role Schemas
 # ============================================================================
+
+
+class RoleBase(BaseModel):
+    """Role base schema."""
+
+    name: str = Field(..., description="Role name", min_length=1, max_length=255)
+    permissions: list[str] = Field(..., description="Role permissions")
+    description: Optional[str] = Field(None, description="Role description")
+
+
+class RoleCreate(RoleBase):
+    """Role creation schema."""
+
+    pass
+
+
+class RoleUpdate(BaseModel):
+    """Role update schema."""
+
+    name: Optional[str] = Field(None, description="Role name", min_length=1, max_length=255)
+    permissions: Optional[list[str]] = Field(None, description="Role permissions")
+    description: Optional[str] = Field(None, description="Role description")
 
 
 class RoleResponse(BaseModel):
@@ -151,6 +184,23 @@ class CurrentUserResponse(BaseModel):
     permissions: list[str] = Field(..., description="User permissions")
 
 
+class PermissionResponse(BaseModel):
+    """Permission response schema."""
+
+    id: str = Field(..., description="Permission ID")
+    name: str = Field(..., description="Permission name")
+    description: Optional[str] = Field(None, description="Permission description")
+    resource: str = Field(..., description="Resource name")
+    action: str = Field(..., description="Action type (create, read, update, delete)")
+    createdAt: datetime = Field(..., description="Creation timestamp")
+    updatedAt: datetime = Field(..., description="Update timestamp")
+
+    class Config:
+        """Schema config."""
+
+        from_attributes = True
+
+
 __all__ = [
     "LoginRequest",
     "TokenResponse",
@@ -165,6 +215,11 @@ __all__ = [
     "ChangePasswordRequest",
     "PasswordResetRequest",
     "PasswordResetConfirm",
+    "RoleBase",
+    "RoleCreate",
+    "RoleUpdate",
     "RoleResponse",
     "CurrentUserResponse",
+    "PermissionResponse",
+    "UserPreferencesUpdate",
 ]

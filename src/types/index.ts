@@ -41,12 +41,16 @@ export interface SystemSummary {
 export interface AttendanceRecord {
   id: string
   personId: string
+  person_id?: string
   name: string
   role: string
   department: string
-  status: 'on-site' | 'off-site' | 'remote'
+  status: 'on-site' | 'off-site' | 'remote' | 'present' | 'absent' | 'late'
   accuracy: number
   timestamp: string
+  check_in_time?: string
+  check_out_time?: string
+  duration_minutes?: number
   cameraId: string
   cameraName: string
   thumbnail: string
@@ -79,6 +83,22 @@ export interface PersonDetection {
   boundingBox: BoundingBox
   thumbnail: string
   status: 'authorized' | 'visitor' | 'unknown'
+}
+
+export interface DetectionRecord {
+  id: string
+  person_id?: string
+  person_name?: string
+  camera_id?: string
+  confidence: number
+  timestamp?: string
+  created_at?: string
+  location?: {
+    x: number
+    y: number
+    width: number
+    height: number
+  }
 }
 
 export interface BoundingBox {
@@ -144,6 +164,20 @@ export interface FaceProfile {
   status: 'active' | 'pending' | 'archived'
   images: string[]
   notes?: string
+  // Additional properties from API responses
+  firstName?: string
+  first_name?: string
+  lastName?: string
+  last_name?: string
+  email?: string
+  phone?: string
+  person_type?: string
+  id_number?: string
+  id_type?: string
+  organization?: string
+  face_encoding_count?: number
+  check_out_time?: string
+  person_id?: string
 }
 
 export interface FaceRegistrationPayload {

@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(docker --version:*)",
+      "Bash(docker-compose:*)",
+      "Bash(cat:*)",
+      "Bash(tee:*)",
+      "Bash(docker container rm:*)",
+      "Bash(netstat:*)",
+      "Bash(curl:*)",
+      "Bash(pip --version:*)",
+      "Bash(docker container prune:*)",
+      "Bash(docker logs:*)"
     ],
     "deny": [],
     "ask": []

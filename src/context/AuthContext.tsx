@@ -3,7 +3,7 @@
  * Provides authentication state and methods throughout the application
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import { apiClient, type LoginRequest } from '@/services/apiClient'
 
 export interface CurrentUser {

@@ -124,7 +124,7 @@ class DetectionEventLog(Base, TimestampMixin):
 
     # Metadata
     source_system: Mapped[str] = mapped_column(String(50), default="detection_engine")
-    extra_metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
+    extra_meta: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # JSON
 
     __table_args__ = (
         Index("idx_detection_events_camera_id", "camera_id"),

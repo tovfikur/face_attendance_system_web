@@ -3,7 +3,7 @@
  * Manages toast notifications and alerts throughout the application
  */
 
-import React, { createContext, useContext, useState, ReactNode } from 'react'
+import React, { createContext, useContext, useState, type ReactNode } from 'react'
 import { AlertCircle, CheckCircle, Info, AlertTriangle } from 'lucide-react'
 
 export type NotificationType = 'success' | 'error' | 'info' | 'warning'

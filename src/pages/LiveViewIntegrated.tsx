@@ -18,6 +18,7 @@ import {
 import { apiClient } from '@/services/apiClient'
 import { getWebSocketService, type DetectionEvent } from '@/services/websocket'
 import { useNotification } from '@/context/NotificationContext'
+import type { DetectionRecord } from '@/types'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
@@ -27,20 +28,6 @@ interface CameraStreamOptions {
   autoPlay: boolean
   fps: number
   qualityLevel: 'high' | 'medium' | 'low'
-}
-
-interface DetectionRecord {
-  id: string
-  person_id?: string
-  person_name?: string
-  confidence: number
-  timestamp: string
-  location?: {
-    x: number
-    y: number
-    width: number
-    height: number
-  }
 }
 
 export const LiveViewIntegratedPage = () => {
@@ -93,7 +80,7 @@ export const LiveViewIntegratedPage = () => {
       const response = await apiClient.getDetections(1, 50, {
         cameraId: cameraId,
       })
-      setDetections(response.data)
+      setDetections(response.data as DetectionRecord[])
     } catch (err) {
       console.error('Failed to fetch detections:', err)
     }
@@ -604,7 +591,7 @@ export const LiveViewIntegratedPage = () => {
               <li>• Select a camera from the dropdown list</li>
               <li>• Click "Start Stream" to begin viewing live feed</li>
               <li>• Face detections appear as colored rectangles with confidence scores</li>
-              <li>• Green = High confidence (>80%), Yellow = Medium (>70%), Red = Low (<70%)</li>
+              <li>• Green = High confidence (&gt;80%), Yellow = Medium (&gt;70%), Red = Low (&lt;70%)</li>
               <li>• Recent detections are shown in the list below</li>
               <li>• Click "Screenshot" to save current frame as JPEG</li>
             </ul>

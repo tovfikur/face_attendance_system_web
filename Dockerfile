@@ -12,6 +12,6 @@ ENV NODE_ENV=production
 WORKDIR /usr/share/nginx/html
 RUN rm -rf ./*
 COPY --from=builder /app/dist ./
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY docker/nginx-default.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]

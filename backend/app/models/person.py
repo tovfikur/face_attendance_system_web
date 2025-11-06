@@ -71,7 +71,7 @@ class Person(Base, TimestampMixin):
 
     # Metadata
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    metadata: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="JSON metadata")
+    meta_data: Mapped[Optional[str]] = mapped_column(Text, nullable=True, comment="JSON metadata")
 
     # Relations
     face_encodings = relationship(

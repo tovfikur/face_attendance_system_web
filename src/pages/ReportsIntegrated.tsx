@@ -5,22 +5,13 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import {
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
   PieChart,
   Pie,
   Cell,
-  CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
-  XAxis,
-  YAxis,
 } from 'recharts'
 import {
-  Calendar,
   TrendingUp,
   Users,
   Clock,
@@ -99,7 +90,7 @@ export const ReportsIntegratedPage = () => {
           .getPersonStatistics(person.id, dateRange.from, dateRange.to)
           .then((response) => ({
             person_id: person.id,
-            person_name: `${person.first_name} ${person.last_name}`,
+            person_name: `${person.firstName || person.first_name} ${person.lastName || person.last_name}`,
             ...response.data,
           }))
           .catch(() => null)

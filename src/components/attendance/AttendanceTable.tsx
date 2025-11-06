@@ -8,10 +8,13 @@ interface AttendanceTableProps {
   records: AttendanceRecord[]
 }
 
-const statusTone: Record<AttendanceRecord['status'], 'success' | 'warning' | 'info'> = {
+const statusTone: Record<AttendanceRecord['status'], 'success' | 'warning' | 'info' | 'danger'> = {
   'on-site': 'success',
   'off-site': 'warning',
   remote: 'info',
+  present: 'success',
+  absent: 'danger',
+  late: 'warning',
 }
 
 export const AttendanceTable = ({ records }: AttendanceTableProps) => (

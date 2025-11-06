@@ -6,10 +6,8 @@
 
 import type {
   AttendanceRecord,
-  AttendanceStatisticPoint,
   Camera,
   FaceProfile,
-  UserAccount,
 } from '@/types'
 
 // API Configuration
@@ -24,13 +22,14 @@ const TOKEN_EXPIRY_KEY = 'token_expiry'
 
 // Custom error class for API errors
 export class ApiError extends Error {
-  constructor(
-    public statusCode: number,
-    public message: string,
-    public data?: unknown
-  ) {
+  statusCode: number
+  data?: unknown
+
+  constructor(statusCode: number, message: string, data?: unknown) {
     super(message)
     this.name = 'ApiError'
+    this.statusCode = statusCode
+    this.data = data
   }
 }
 
@@ -445,7 +444,7 @@ export const apiClient = {
     late: number
     presence_percentage: number
   }>> {
-    const query = date ? { date } : {}
+    const query = date ? { date: date } : undefined
     return apiClient.request('GET', '/attendance/reports/daily', { query })
   },
 

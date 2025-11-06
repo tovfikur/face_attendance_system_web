@@ -4,8 +4,6 @@
  * Handles auto-reconnection and graceful degradation
  */
 
-import { apiClient } from './apiClient'
-
 export type WebSocketMessageType =
   | 'connection_established'
   | 'initial_status'

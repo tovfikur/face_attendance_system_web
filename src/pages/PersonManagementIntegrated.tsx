@@ -348,7 +348,7 @@ export const PersonManagementIntegratedPage = () => {
                             ? 'info'
                             : person.person_type === 'visitor'
                               ? 'warning'
-                              : 'secondary'
+                              : 'neutral'
                         }
                         soft
                       >
